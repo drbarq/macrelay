@@ -1,0 +1,31 @@
+[package]
+name = "macuse-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+rmcp = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# macOS framework bindings
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSString", "NSArray", "NSDate", "NSDictionary", "NSError", "NSURL", "NSCalendar", "NSTimeZone"] }
+objc2-event-kit = { version = "0.3", features = ["EKEventStore", "EKEvent", "EKCalendar", "EKReminder", "EKCalendarItem", "EKObject", "EKSource", "EKAlarm", "EKRecurrenceRule", "EKStructuredLocation"] }
+objc2-contacts = { version = "0.3", features = ["CNContactStore", "CNContact", "CNContactFetchRequest", "CNMutableContact", "CNLabeledValue", "CNPhoneNumber", "CNPostalAddress"] }
+objc2-core-location = { version = "0.3", features = ["CLLocationManager", "CLLocation", "CLGeocoder", "CLPlacemark"] }
+objc2-app-kit = { version = "0.3", features = ["NSWorkspace", "NSRunningApplication"] }
+
+# SQLite for Messages/Notes/Mail
+rusqlite = { version = "0.39", features = ["bundled"] }
+
+# Input simulation
+core-graphics = "0.25"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }

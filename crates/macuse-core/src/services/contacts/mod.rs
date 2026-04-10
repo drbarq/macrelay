@@ -1,0 +1,150 @@
+use std::sync::Arc;
+
+use rmcp::model::Tool;
+use serde_json::json;
+
+use crate::registry::{error_result, schema_from_json, text_result, ServiceRegistry, ToolHandler};
+
+/// Register all contacts tools with the service registry.
+pub fn register(registry: &mut ServiceRegistry) {
+    registry.register(
+        "contacts_search",
+        Tool::new(
+            "contacts_search",
+            "Search contacts by name, phone number, or email address.",
+            schema_from_json(json!({
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Name, phone number, or email to search for."
+                    }
+                },
+                "required": ["query"]
+            })),
+        ),
+        handler_search(),
+    );
+
+    registry.register(
+        "contacts_get_all",
+        Tool::new(
+            "contacts_get_all",
+            "Get all contacts. Returns names, phone numbers, and email addresses.",
+            schema_from_json(json!({
+                "type": "object",
+                "properties": {
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum contacts to return. Default 100."
+                    }
+                }
+            })),
+        ),
+        handler_get_all(),
+    );
+}
+
+fn handler_search() -> ToolHandler {
+    Arc::new(|args| {
+        Box::pin(async move {
+            let query = args
+                .get("query")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| anyhow::anyhow!("query is required"))?;
+
+            // Use AppleScript for reliable contact search
+            let script = format!(
+                r#"tell application "Contacts"
+                    set matchingPeople to (every person whose name contains "{query}")
+                    set output to ""
+                    repeat with p in matchingPeople
+                        set pName to name of p
+                        set pEmails to ""
+                        repeat with e in emails of p
+                            set pEmails to pEmails & value of e & ", "
+                        end repeat
+                        set pPhones to ""
+                        repeat with ph in phones of p
+                            set pPhones to pPhones & value of ph & ", "
+                        end repeat
+                        set output to output & pName & " | Emails: " & pEmails & " | Phones: " & pPhones & "
+"
+                    end repeat
+                    if output is "" then
+                        return "No contacts found matching: {query}"
+                    end if
+                    return output
+                end tell"#
+            );
+
+            match crate::macos::applescript::run_applescript(&script) {
+                Ok(result) => Ok(text_result(result)),
+                Err(e) => Ok(error_result(format!("Failed to search contacts: {e}"))),
+            }
+        })
+    })
+}
+
+fn handler_get_all() -> ToolHandler {
+    Arc::new(|args| {
+        Box::pin(async move {
+            let limit = args
+                .get("limit")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(100);
+
+            let script = format!(
+                r#"tell application "Contacts"
+                    set allPeople to every person
+                    set output to ""
+                    set counter to 0
+                    repeat with p in allPeople
+                        if counter >= {limit} then exit repeat
+                        set pName to name of p
+                        set pEmails to ""
+                        repeat with e in emails of p
+                            set pEmails to pEmails & value of e & ", "
+                        end repeat
+                        set pPhones to ""
+                        repeat with ph in phones of p
+                            set pPhones to pPhones & value of ph & ", "
+                        end repeat
+                        set output to output & pName & " | Emails: " & pEmails & " | Phones: " & pPhones & "
+"
+                        set counter to counter + 1
+                    end repeat
+                    return output
+                end tell"#
+            );
+
+            match crate::macos::applescript::run_applescript(&script) {
+                Ok(result) => {
+                    if result.is_empty() {
+                        Ok(text_result("No contacts found."))
+                    } else {
+                        Ok(text_result(result))
+                    }
+                }
+                Err(e) => Ok(error_result(format!("Failed to get contacts: {e}"))),
+            }
+        })
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tool_schemas_valid() {
+        let mut registry = ServiceRegistry::new();
+        register(&mut registry);
+        let tools = registry.list_tools();
+        assert_eq!(tools.len(), 2);
+
+        let names: Vec<_> = tools.iter().map(|t| t.name.as_ref()).collect();
+        assert!(names.contains(&"contacts_search"));
+        assert!(names.contains(&"contacts_get_all"));
+    }
+}
