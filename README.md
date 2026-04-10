@@ -1,4 +1,4 @@
-# mac-use-oss
+# mac-app-oss
 
 Open-source MCP server for macOS native app integration and universal UI control.
 
@@ -6,7 +6,7 @@ A local, privacy-first replacement for [MacUse](https://macuse.app) that works w
 
 ## What It Does
 
-mac-use-oss gives AI assistants direct access to your Mac's native apps and universal control of any application's UI:
+mac-app-oss gives AI assistants direct access to your Mac's native apps and universal control of any application's UI:
 
 - **Calendar** - Create events, search schedules, find available times
 - **Reminders** - Create, complete, and manage reminders
@@ -90,7 +90,7 @@ We're building the same thing, open-source, using the same proven technical appr
 ## Project Structure
 
 ```
-mac-use-oss/
+mac-app-oss/
   Cargo.toml                        # Workspace root
   crates/
     macuse-app/                     # Tauri app (system tray + settings UI)
@@ -143,7 +143,7 @@ mac-use-oss/
 
 ## Permissions
 
-mac-use-oss needs macOS permissions to access native apps. The first-run wizard walks you through each one:
+mac-app-oss needs macOS permissions to access native apps. The first-run wizard walks you through each one:
 
 | Permission | Required For | How to Grant |
 |---|---|---|
@@ -215,7 +215,7 @@ Every service ships with tests. CI runs Tier 1; release gates on all three tiers
 - [ ] GitHub Actions CI
 - [ ] Code signing + notarization
 
-**Exit criteria:** Feature parity with MacUse. `brew install mac-use-oss` works. DMG installs without Gatekeeper warnings.
+**Exit criteria:** Feature parity with MacUse. `brew install mac-app-oss` works. DMG installs without Gatekeeper warnings.
 
 ## Contributing
 

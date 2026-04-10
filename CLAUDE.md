@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-mac-use-oss is an open-source MCP server that gives AI assistants access to macOS native apps and universal UI control. It's a local, privacy-first replacement for MacUse (macuse.app).
+mac-app-oss is an open-source MCP server that gives AI assistants access to macOS native apps and universal UI control. It's a local, privacy-first replacement for MacUse (macuse.app).
 
 ## Target Audience
 

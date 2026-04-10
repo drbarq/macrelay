@@ -1,8 +1,8 @@
-# Product Requirements Document: mac-use-oss
+# Product Requirements Document: mac-app-oss
 
 ## 1. Overview
 
-mac-use-oss is an open-source MCP (Model Context Protocol) server for macOS that gives AI assistants access to native Mac apps and universal UI control. It replaces the closed-source MacUse app ($39, macuse.app) with a fully local, privacy-first, open-source alternative.
+mac-app-oss is an open-source MCP (Model Context Protocol) server for macOS that gives AI assistants access to native Mac apps and universal UI control. It replaces the closed-source MacUse app ($39, macuse.app) with a fully local, privacy-first, open-source alternative.
 
 ## 2. Goals
 
