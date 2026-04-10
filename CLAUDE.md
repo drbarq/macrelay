@@ -32,16 +32,16 @@ cargo build                    # Debug build
 cargo build --release          # Release build
 cargo test                     # Unit tests (no permissions needed)
 cargo test -- --ignored        # Integration tests (needs macOS permissions)
-cargo test -p macuse-test-harness  # E2E MCP round-trip tests
+cargo test -p macapp-test-harness  # E2E MCP round-trip tests
 ```
 
 ## Key Directories
 
-- `crates/macuse-core/src/services/` - One module per service (calendar, reminders, etc.)
-- `crates/macuse-core/src/macos/` - macOS API wrappers (eventkit, contacts, accessibility, etc.)
-- `crates/macuse-server/src/` - MCP server binary (stdio + HTTP transport)
-- `crates/macuse-app/src/` - Tauri app (system tray, settings UI)
-- `crates/macuse-test-harness/` - E2E test client
+- `crates/macapp-core/src/services/` - One module per service (calendar, reminders, etc.)
+- `crates/macapp-core/src/macos/` - macOS API wrappers (eventkit, contacts, accessibility, etc.)
+- `crates/macapp-server/src/` - MCP server binary (stdio + HTTP transport)
+- `crates/macapp-app/src/` - Tauri app (system tray, settings UI)
+- `crates/macapp-test-harness/` - E2E test client
 
 ## Architecture Notes
 

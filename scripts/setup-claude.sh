@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BINARY_NAME="macuse-server"
+BINARY_NAME="macapp-server"
 INSTALL_DIR="$HOME/.local/bin"
 INSTALL_PATH="$INSTALL_DIR/$BINARY_NAME"
 MCP_KEY="mac-app-oss"

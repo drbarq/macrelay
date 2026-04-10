@@ -96,8 +96,8 @@ pub async fn search_events_applescript(
 /// Create a calendar event using AppleScript.
 pub async fn create_event(
     title: &str,
-    start_date: &str,
-    end_date: &str,
+    _start_date: &str,
+    _end_date: &str,
     is_all_day: bool,
     location: &str,
     notes: &str,

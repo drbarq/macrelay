@@ -1,15 +1,15 @@
 [package]
-name = "macuse-server"
+name = "macapp-server"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [[bin]]
-name = "macuse-server"
+name = "macapp-server"
 path = "src/main.rs"
 
 [dependencies]
-macuse-core = { workspace = true }
+macapp-core = { workspace = true }
 rmcp = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }

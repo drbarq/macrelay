@@ -93,7 +93,7 @@ We're building the same thing, open-source, using the same proven technical appr
 mac-app-oss/
   Cargo.toml                        # Workspace root
   crates/
-    macuse-app/                     # Tauri app (system tray + settings UI)
+    macapp-app/                     # Tauri app (system tray + settings UI)
       src/
         main.rs                     # Tauri entry, system tray, LaunchAgent
         tray.rs                     # System tray icon + menu
@@ -102,11 +102,11 @@ mac-app-oss/
       ui/                           # Frontend (HTML/JS)
         index.html                  # Settings/status dashboard
         setup.html                  # Permission wizard
-    macuse-server/                  # MCP server binary (standalone)
+    macapp-server/                  # MCP server binary (standalone)
       src/
         main.rs                     # Entry point, stdio + HTTP transport
         config.rs                   # CLI args, env vars
-    macuse-core/                    # Core library (all services)
+    macapp-core/                    # Core library (all services)
       src/
         lib.rs
         registry.rs                 # Service registry, tool routing
@@ -133,7 +133,7 @@ mac-app-oss/
           sqlite.rs
           applescript.rs
           jxa.rs
-    macuse-test-harness/            # E2E MCP test client
+    macapp-test-harness/            # E2E MCP test client
       src/lib.rs                    # Spawn server, send tool calls, validate
       tests/                        # Per-service E2E tests
   scripts/
@@ -165,7 +165,7 @@ Three tiers of tests ensure reliability:
 |---|---|---|---|
 | 1. Unit | `cargo test` | Parsing, serialization, query building | No |
 | 2. Integration | `cargo test -- --ignored` | Real macOS API calls, CRUD round-trips | Yes |
-| 3. E2E | `cargo test -p macuse-test-harness` | Full MCP JSON-RPC round-trips | Yes |
+| 3. E2E | `cargo test -p macapp-test-harness` | Full MCP JSON-RPC round-trips | Yes |
 
 Every service ships with tests. CI runs Tier 1; release gates on all three tiers.
 
@@ -222,7 +222,7 @@ Every service ships with tests. CI runs Tier 1; release gates on all three tiers
 > Contributing guidelines coming soon.
 
 The project is structured so adding a new service is self-contained:
-1. Create a module in `crates/macuse-core/src/services/`
+1. Create a module in `crates/macapp-core/src/services/`
 2. Implement the service trait with tools
 3. Register in the service registry
 4. Add tests

@@ -14,7 +14,7 @@ use rmcp::{ErrorData as McpError, RoleServer};
 use serde_json::Value;
 use tracing_subscriber::EnvFilter;
 
-use macuse_core::registry::ServiceRegistry;
+use macapp_core::registry::ServiceRegistry;
 
 /// The MCP server handler that routes tool calls to our service registry.
 struct MacAppServer {
@@ -85,10 +85,10 @@ async fn main() -> Result<()> {
     // Build the service registry with all tools
     let mut registry = ServiceRegistry::new();
 
-    macuse_core::services::calendar::register(&mut registry);
-    macuse_core::services::reminders::register(&mut registry);
-    macuse_core::services::contacts::register(&mut registry);
-    macuse_core::services::permissions_status::register(&mut registry);
+    macapp_core::services::calendar::register(&mut registry);
+    macapp_core::services::reminders::register(&mut registry);
+    macapp_core::services::contacts::register(&mut registry);
+    macapp_core::services::permissions_status::register(&mut registry);
 
     let tool_count = registry.list_tools().len();
     tracing::info!("Registered {tool_count} tools");

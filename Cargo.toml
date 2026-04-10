@@ -1,8 +1,8 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/macuse-core",
-    "crates/macuse-server",
+    "crates/macapp-core",
+    "crates/macapp-server",
 ]
 
 [workspace.package]
@@ -12,7 +12,7 @@ license = "MIT"
 repository = "https://github.com/drbarq/mac-app-oss"
 
 [workspace.dependencies]
-macuse-core = { path = "crates/macuse-core" }
+macapp-core = { path = "crates/macapp-core" }
 rmcp = { version = "1.4", features = ["server", "transport-io"] }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
