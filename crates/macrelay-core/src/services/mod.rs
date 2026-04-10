@@ -2,3 +2,8 @@ pub mod calendar;
 pub mod reminders;
 pub mod contacts;
 pub mod permissions_status;
+pub mod notes;
+pub mod mail;
+pub mod messages;
+pub mod location;
+pub mod maps;

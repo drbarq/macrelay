@@ -83,10 +83,18 @@ async fn main() -> Result<()> {
 
     let mut registry = ServiceRegistry::new();
 
+    // Phase 1
     macrelay_core::services::calendar::register(&mut registry);
     macrelay_core::services::reminders::register(&mut registry);
     macrelay_core::services::contacts::register(&mut registry);
     macrelay_core::services::permissions_status::register(&mut registry);
+
+    // Phase 2
+    macrelay_core::services::notes::register(&mut registry);
+    macrelay_core::services::mail::register(&mut registry);
+    macrelay_core::services::messages::register(&mut registry);
+    macrelay_core::services::location::register(&mut registry);
+    macrelay_core::services::maps::register(&mut registry);
 
     let tool_count = registry.list_tools().len();
     tracing::info!("Registered {tool_count} tools");
