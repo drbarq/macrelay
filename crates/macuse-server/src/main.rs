@@ -88,6 +88,7 @@ async fn main() -> Result<()> {
     macuse_core::services::calendar::register(&mut registry);
     macuse_core::services::reminders::register(&mut registry);
     macuse_core::services::contacts::register(&mut registry);
+    macuse_core::services::permissions_status::register(&mut registry);
 
     let tool_count = registry.list_tools().len();
     tracing::info!("Registered {tool_count} tools");

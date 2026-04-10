@@ -96,6 +96,70 @@ pub fn register(registry: &mut ServiceRegistry) {
         ),
         handler_complete_reminder(),
     );
+
+    registry.register(
+        "reminders_update_reminder",
+        Tool::new(
+            "reminders_update_reminder",
+            "Update a reminder's properties. Finds the reminder by its current title.",
+            schema_from_json(json!({
+                "type": "object",
+                "properties": {
+                    "title": {
+                        "type": "string",
+                        "description": "Current title of the reminder to update."
+                    },
+                    "new_title": {
+                        "type": "string",
+                        "description": "New title for the reminder."
+                    },
+                    "notes": {
+                        "type": "string",
+                        "description": "New notes for the reminder."
+                    },
+                    "priority": {
+                        "type": "string",
+                        "enum": ["none", "low", "medium", "high"],
+                        "description": "New priority level."
+                    }
+                },
+                "required": ["title"]
+            })),
+        ),
+        handler_update_reminder(),
+    );
+
+    registry.register(
+        "reminders_delete_reminder",
+        Tool::new(
+            "reminders_delete_reminder",
+            "Permanently delete a reminder by title.",
+            schema_from_json(json!({
+                "type": "object",
+                "properties": {
+                    "title": {
+                        "type": "string",
+                        "description": "Title of the reminder to delete."
+                    }
+                },
+                "required": ["title"]
+            })),
+        ),
+        handler_delete_reminder(),
+    );
+
+    registry.register(
+        "reminders_open_reminder",
+        Tool::new(
+            "reminders_open_reminder",
+            "Open the Reminders app.",
+            schema_from_json(json!({
+                "type": "object",
+                "properties": {},
+            })),
+        ),
+        handler_open_reminder(),
+    );
 }
 
 fn handler_list_lists() -> ToolHandler {
@@ -274,6 +338,114 @@ fn handler_complete_reminder() -> ToolHandler {
     })
 }
 
+fn handler_update_reminder() -> ToolHandler {
+    Arc::new(|args| {
+        Box::pin(async move {
+            let title = args
+                .get("title")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| anyhow::anyhow!("title is required"))?;
+
+            let new_title = args.get("new_title").and_then(|v| v.as_str());
+            let notes = args.get("notes").and_then(|v| v.as_str());
+            let priority = args.get("priority").and_then(|v| v.as_str());
+
+            let mut set_clauses = Vec::new();
+            if let Some(nt) = new_title {
+                set_clauses.push(format!(r#"set name of r to "{nt}""#));
+            }
+            if let Some(n) = notes {
+                set_clauses.push(format!(r#"set body of r to "{n}""#));
+            }
+            if let Some(p) = priority {
+                let priority_num = match p {
+                    "high" => 1,
+                    "medium" => 5,
+                    "low" => 9,
+                    _ => 0,
+                };
+                set_clauses.push(format!("set priority of r to {priority_num}"));
+            }
+
+            if set_clauses.is_empty() {
+                return Ok(error_result(
+                    "No update fields provided. Specify at least one of: new_title, notes, priority.",
+                ));
+            }
+
+            let updates = set_clauses.join("\n                            ");
+
+            let script = format!(
+                r#"
+                tell application "Reminders"
+                    set matchingReminders to (every reminder whose name is "{title}" and completed is false)
+                    if (count of matchingReminders) > 0 then
+                        set r to item 1 of matchingReminders
+                        {updates}
+                        return "Updated reminder: {title}"
+                    else
+                        return "No incomplete reminder found with title: {title}"
+                    end if
+                end tell
+                "#
+            );
+
+            match crate::macos::applescript::run_applescript(&script) {
+                Ok(result) => Ok(text_result(result)),
+                Err(e) => Ok(error_result(format!("Failed to update reminder: {e}"))),
+            }
+        })
+    })
+}
+
+fn handler_delete_reminder() -> ToolHandler {
+    Arc::new(|args| {
+        Box::pin(async move {
+            let title = args
+                .get("title")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| anyhow::anyhow!("title is required"))?;
+
+            let script = format!(
+                r#"
+                tell application "Reminders"
+                    set matchingReminders to (every reminder whose name is "{title}")
+                    if (count of matchingReminders) > 0 then
+                        delete item 1 of matchingReminders
+                        return "Deleted reminder: {title}"
+                    else
+                        return "No reminder found with title: {title}"
+                    end if
+                end tell
+                "#
+            );
+
+            match crate::macos::applescript::run_applescript(&script) {
+                Ok(result) => Ok(text_result(result)),
+                Err(e) => Ok(error_result(format!("Failed to delete reminder: {e}"))),
+            }
+        })
+    })
+}
+
+fn handler_open_reminder() -> ToolHandler {
+    Arc::new(|_args| {
+        Box::pin(async move {
+            let script = r#"
+                tell application "Reminders"
+                    activate
+                end tell
+                return "Reminders app opened"
+            "#;
+
+            match crate::macos::applescript::run_applescript(script) {
+                Ok(result) => Ok(text_result(result)),
+                Err(e) => Ok(error_result(format!("Failed to open Reminders: {e}"))),
+            }
+        })
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -283,12 +455,15 @@ mod tests {
         let mut registry = ServiceRegistry::new();
         register(&mut registry);
         let tools = registry.list_tools();
-        assert!(tools.len() >= 4, "Expected at least 4 reminder tools");
+        assert!(tools.len() >= 7, "Expected at least 7 reminder tools");
 
         let names: Vec<_> = tools.iter().map(|t| t.name.as_ref()).collect();
         assert!(names.contains(&"reminders_list_lists"));
         assert!(names.contains(&"reminders_search_reminders"));
         assert!(names.contains(&"reminders_create_reminder"));
         assert!(names.contains(&"reminders_complete_reminder"));
+        assert!(names.contains(&"reminders_update_reminder"));
+        assert!(names.contains(&"reminders_delete_reminder"));
+        assert!(names.contains(&"reminders_open_reminder"));
     }
 }
