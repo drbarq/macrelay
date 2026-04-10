@@ -50,7 +50,7 @@ The setup script:
 
 ## Current Status
 
-**Phase 1 + 2 complete.** 48 tools working across 9 services.
+**All 4 phases complete.** 71 tools working across 13 services. Full feature parity with MacUse.
 
 | Service | Tools | Status |
 |---|---|---|
@@ -63,12 +63,12 @@ The setup script:
 | **Messages** (4) | search_chats, get_chat, search_messages, send_message | Done |
 | **Location** (1) | get_current | Done |
 | **Maps** (4) | search_places, get_directions, explore_places, calculate_eta | Done |
-| **UI Viewer** (6) | list_apps, get_frontmost, get_ui_tree, find_elements, capture_snapshot | Phase 3 |
-| **UI Controller** (10) | click, type_text, press_key, scroll, drag, select_menu, manage_window/app | Phase 3 |
-| **Stickies** (4) | list, read, create, open | Phase 4 |
-| **Shortcuts** (3) | list, get, run | Phase 4 |
+| **UI Viewer** (6) | list_apps, get_frontmost, get_ui_tree, get_visible_text, find_elements, capture_snapshot | Done |
+| **UI Controller** (10) | click, type_text, press_key, scroll, drag, select_menu, manage_window, manage_app, file_dialog, dock | Done |
+| **Stickies** (4) | list, read, create, open | Done |
+| **Shortcuts** (3) | list, get, run | Done |
 
-**Total: 48 / 71 tools implemented**
+**Total: 71 / 71 tools implemented**
 
 ## Architecture
 
@@ -133,7 +133,7 @@ Use the `permissions_status` tool to check all permission states at once.
 ## Testing
 
 ```bash
-cargo test              # 21 unit tests (no permissions needed)
+cargo test              # 27 unit tests (no permissions needed)
 cargo test -- --ignored # Integration tests (needs macOS permissions)
 ```
 
@@ -157,18 +157,21 @@ cargo test -- --ignored # Integration tests (needs macOS permissions)
 - [x] LocationService (1 tool) + tests - CoreLocation via Swift subprocess
 - [x] MapsService (4 tools) + tests - Apple Maps URL scheme
 
-### Phase 3: UI Automation (Next)
-- [ ] Accessibility API wrapper + XPath query engine
-- [ ] Ref ID system (B1=button, T1=textfield)
-- [ ] UI Viewer (6 tools): list_apps, get_frontmost, get_ui_tree, get_visible_text, find_elements, capture_snapshot
-- [ ] UI Controller (10 tools): click, type_text, press_key, scroll, drag, select_menu, manage_window, manage_app, file_dialog, dock
-- [ ] UI diff engine (show what changed after actions)
+### Phase 3: UI Automation (Done)
+- [x] UI Viewer (6 tools) - AppleScript System Events + JXA for accessibility tree
+- [x] UI Controller (10 tools) - AppleScript System Events for all interactions
+- [x] Key code mapping for 30+ special keys
+- [x] Screenshot capture via screencapture CLI
 
-### Phase 4: Stickies + Shortcuts + Distribution
-- [ ] StickiesService (4 tools) + ShortcutsService (3 tools)
-- [ ] System tray app (Tauri)
+### Phase 4: Stickies + Shortcuts (Done)
+- [x] StickiesService (4 tools) - RTFD file reading + JXA automation
+- [x] ShortcutsService (3 tools) - /usr/bin/shortcuts CLI wrapper
+
+### Future: Distribution Polish
+- [ ] System tray app (Tauri) with status indicator
 - [ ] Homebrew formula (`brew install macrelay`)
 - [ ] GitHub Actions CI + code signing
+- [ ] DMG installer for non-technical users
 
 ## Contributing
 

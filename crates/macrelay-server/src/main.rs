@@ -100,6 +100,10 @@ async fn main() -> Result<()> {
     macrelay_core::services::ui_viewer::register(&mut registry);
     macrelay_core::services::ui_controller::register(&mut registry);
 
+    // Phase 4
+    macrelay_core::services::stickies::register(&mut registry);
+    macrelay_core::services::shortcuts::register(&mut registry);
+
     let tool_count = registry.list_tools().len();
     tracing::info!("Registered {tool_count} tools");
 
