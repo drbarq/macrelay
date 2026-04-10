@@ -1,4 +1,4 @@
-# Product Requirements Document: mac-app-oss
+# Product Requirements Document: MacRelay
 
 ## Current Status (Updated 2026-04-10)
 
@@ -18,7 +18,7 @@
 
 ## 1. Overview
 
-mac-app-oss is an open-source MCP (Model Context Protocol) server for macOS that gives AI assistants access to native Mac apps and universal UI control. It replaces the closed-source MacUse app ($39, macuse.app) with a fully local, privacy-first, open-source alternative.
+MacRelay is an open-source MCP (Model Context Protocol) server for macOS that gives AI assistants access to native Mac apps and universal UI control. It replaces the closed-source MacUse app ($39, macuse.app) with a fully local, privacy-first, open-source alternative.
 
 ## 2. Goals
 

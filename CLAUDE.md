@@ -2,13 +2,13 @@
 
 ## Project Overview
 
-mac-app-oss is an open-source MCP server that gives AI assistants access to macOS native apps and universal UI control. It's a local, privacy-first replacement for MacUse (macuse.app).
+MacRelay is an open-source MCP server that relays AI commands to native macOS apps. It's a local, privacy-first replacement for MacUse (macuse.app).
 
-**Current state:** Phase 1 complete. 18 tools working (Calendar 8, Reminders 7, Contacts 2, Permissions 1). Binary installed at `~/.local/bin/macapp-server`, configured for Claude Desktop and Claude Code.
+**Current state:** Phase 1 complete. 18 tools working (Calendar 8, Reminders 7, Contacts 2, Permissions 1). Binary installed at `~/.local/bin/macrelay`, configured for Claude Desktop and Claude Code.
 
 ## Target Audience
 
-Non-technical people who use Claude Desktop/Claude Code. Installation must be simple (`bash scripts/setup-claude.sh`). System tray icon planned for Phase 4.
+Non-technical people who use Claude Desktop/Claude Code. Installation: `bash scripts/setup-claude.sh`.
 
 ## Tech Stack
 
@@ -17,14 +17,6 @@ Non-technical people who use Claude Desktop/Claude Code. Installation must be si
 - **macOS APIs:** AppleScript via osascript (Phase 1), objc2 crate family for later phases
 - **Database:** rusqlite (bundled) for Messages/Notes/Mail SQLite reads in Phase 2
 - **UI Automation:** Accessibility API + CGEvent (Phase 3)
-
-## Development Rules
-
-- **Tests are mandatory.** Every service ships with unit tests. Never skip tests.
-- **Human-readable errors.** When a permission is missing, return a message explaining what to enable and where in System Settings.
-- **No telemetry.** No analytics, no crash reporting, no phone-home. Everything stays local.
-- **Phase-based development.** See README.md roadmap. Complete each phase with tests before moving on.
-- **AppleScript first.** Use AppleScript for Phase 1-2 (avoids objc2 Send/Sync complexity). Migrate to direct framework calls for performance later.
 
 ## Build Commands
 
@@ -38,11 +30,11 @@ bash scripts/setup-claude.sh   # Build + install + configure Claude Desktop/Code
 
 ## Key Directories
 
-- `crates/macapp-core/src/services/` - One module per service (calendar, reminders, contacts, permissions_status)
-- `crates/macapp-core/src/macos/` - macOS API wrappers (applescript.rs, eventkit.rs)
-- `crates/macapp-core/src/registry.rs` - Service registry with dynamic tool routing
-- `crates/macapp-core/src/permissions.rs` - Permission checking with human-readable errors
-- `crates/macapp-server/src/main.rs` - MCP server entry point (ServerHandler impl)
+- `crates/macrelay-core/src/services/` - One module per service (calendar, reminders, contacts, permissions_status)
+- `crates/macrelay-core/src/macos/` - macOS API wrappers (applescript.rs, eventkit.rs)
+- `crates/macrelay-core/src/registry.rs` - Service registry with dynamic tool routing
+- `crates/macrelay-core/src/permissions.rs` - Permission checking with human-readable errors
+- `crates/macrelay-server/src/main.rs` - MCP server entry point (ServerHandler impl)
 - `scripts/setup-claude.sh` - Install and configure for Claude Desktop/Code
 
 ## Architecture Notes
@@ -50,11 +42,11 @@ bash scripts/setup-claude.sh   # Build + install + configure Claude Desktop/Code
 - Server implements `rmcp::handler::server::ServerHandler` trait
 - Tools registered dynamically via `ServiceRegistry` (not via rmcp macros)
 - Each service has a `pub fn register(registry: &mut ServiceRegistry)` entry point
-- Tool handlers are `Arc<dyn Fn(HashMap<String, Value>) -> Pin<Box<dyn Future<Output = Result<CallToolResult>>>>>`
 - `schema_from_json(json!({...}))` converts serde_json::Value to `Arc<JsonObject>` for tool schemas
 - `text_result()` / `error_result()` helpers for creating CallToolResult
-- AppleScript uses `||` as field delimiter for multi-value outputs (pipes can appear in data)
+- AppleScript uses `||` as field delimiter for multi-value outputs
 - Server logs to stderr, MCP JSON-RPC goes to stdout
+- Binary name is `macrelay` (not `macrelay-server`)
 
 ## What's Next (Phase 2)
 

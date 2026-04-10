@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BINARY_NAME="macapp-server"
+BINARY_NAME="macrelay"
 INSTALL_DIR="$HOME/.local/bin"
 INSTALL_PATH="$INSTALL_DIR/$BINARY_NAME"
-MCP_KEY="mac-app-oss"
+MCP_KEY="macrelay"
 
 # ── 1. Build the release binary ─────────────────────────────────────────────
 

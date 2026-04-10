@@ -14,22 +14,22 @@ use rmcp::{ErrorData as McpError, RoleServer};
 use serde_json::Value;
 use tracing_subscriber::EnvFilter;
 
-use macapp_core::registry::ServiceRegistry;
+use macrelay_core::registry::ServiceRegistry;
 
 /// The MCP server handler that routes tool calls to our service registry.
-struct MacAppServer {
+struct MacRelayServer {
     registry: Arc<ServiceRegistry>,
 }
 
-impl ServerHandler for MacAppServer {
+impl ServerHandler for MacRelayServer {
     fn get_info(&self) -> ServerInfo {
         let mut info = ServerInfo::default();
         info.instructions = Some(
-            "mac-app-oss: Open-source MCP server for macOS native app integration and universal UI control. \
+            "MacRelay: Open-source MCP server for macOS. \
              Use these tools to interact with Calendar, Reminders, Contacts, and more on this Mac."
                 .into(),
         );
-        info.server_info.name = "mac-app-oss".into();
+        info.server_info.name = "macrelay".into();
         info.server_info.version = env!("CARGO_PKG_VERSION").into();
         info
     }
@@ -72,7 +72,6 @@ impl ServerHandler for MacAppServer {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Set up logging to stderr (stdout is for MCP JSON-RPC)
     tracing_subscriber::fmt()
         .with_env_filter(
             EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
@@ -80,25 +79,22 @@ async fn main() -> Result<()> {
         .with_writer(std::io::stderr)
         .init();
 
-    tracing::info!("mac-app-oss v{} starting...", env!("CARGO_PKG_VERSION"));
+    tracing::info!("MacRelay v{} starting...", env!("CARGO_PKG_VERSION"));
 
-    // Build the service registry with all tools
     let mut registry = ServiceRegistry::new();
 
-    macapp_core::services::calendar::register(&mut registry);
-    macapp_core::services::reminders::register(&mut registry);
-    macapp_core::services::contacts::register(&mut registry);
-    macapp_core::services::permissions_status::register(&mut registry);
+    macrelay_core::services::calendar::register(&mut registry);
+    macrelay_core::services::reminders::register(&mut registry);
+    macrelay_core::services::contacts::register(&mut registry);
+    macrelay_core::services::permissions_status::register(&mut registry);
 
     let tool_count = registry.list_tools().len();
     tracing::info!("Registered {tool_count} tools");
 
-    // Create the server
-    let server = MacAppServer {
+    let server = MacRelayServer {
         registry: Arc::new(registry),
     };
 
-    // Run with stdio transport
     let transport = stdio();
     let service = server.serve(transport).await?;
     service.waiting().await?;

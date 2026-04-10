@@ -1,18 +1,18 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/macapp-core",
-    "crates/macapp-server",
+    "crates/macrelay-core",
+    "crates/macrelay-server",
 ]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
-repository = "https://github.com/drbarq/mac-app-oss"
+repository = "https://github.com/drbarq/macrelay"
 
 [workspace.dependencies]
-macapp-core = { path = "crates/macapp-core" }
+macrelay-core = { path = "crates/macrelay-core" }
 rmcp = { version = "1.4", features = ["server", "transport-io"] }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }

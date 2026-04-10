@@ -1,15 +1,15 @@
 [package]
-name = "macapp-server"
+name = "macrelay-server"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [[bin]]
-name = "macapp-server"
+name = "macrelay"
 path = "src/main.rs"
 
 [dependencies]
-macapp-core = { workspace = true }
+macrelay-core = { workspace = true }
 rmcp = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }
