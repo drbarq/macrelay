@@ -50,7 +50,7 @@ The setup script:
 
 ## Current Status
 
-**Phase 1 complete.** 18 tools working across Calendar, Reminders, Contacts, and Permissions.
+**Phase 1 + 2 complete.** 48 tools working across 9 services.
 
 | Service | Tools | Status |
 |---|---|---|
@@ -58,17 +58,17 @@ The setup script:
 | **Reminders** (7) | list_lists, search_reminders, create_reminder, update_reminder, delete_reminder, complete_reminder, open_reminder | Done |
 | **Contacts** (2) | search, get_all | Done |
 | **Permissions** (1) | permissions_status | Done |
-| **Messages** (4) | search_chats, get_chat, search_messages, send_messages | Phase 2 |
-| **Mail** (13) | list_accounts, list_mailboxes, search/get/compose/reply/forward/move/delete messages | Phase 2 |
-| **Notes** (8) | list/search/read/write/delete/restore notes | Phase 2 |
-| **Location** (1) | get_current | Phase 2 |
-| **Maps** (4) | search_places, get_directions, explore_places, calculate_eta | Phase 2 |
+| **Notes** (8) | list_accounts, list_folders, search_notes, read_note, write_note, delete_note, restore_note, open_note | Done |
+| **Mail** (13) | list_accounts, list_mailboxes, search_messages, get_messages, get_thread, compose_message, reply_message, forward_message, update_read_state, move_message, delete_message, open_message, get_attachment | Done |
+| **Messages** (4) | search_chats, get_chat, search_messages, send_message | Done |
+| **Location** (1) | get_current | Done |
+| **Maps** (4) | search_places, get_directions, explore_places, calculate_eta | Done |
 | **UI Viewer** (6) | list_apps, get_frontmost, get_ui_tree, find_elements, capture_snapshot | Phase 3 |
 | **UI Controller** (10) | click, type_text, press_key, scroll, drag, select_menu, manage_window/app | Phase 3 |
 | **Stickies** (4) | list, read, create, open | Phase 4 |
 | **Shortcuts** (3) | list, get, run | Phase 4 |
 
-**Total: 18 / 71 tools implemented**
+**Total: 48 / 71 tools implemented**
 
 ## Architecture
 
@@ -133,7 +133,7 @@ Use the `permissions_status` tool to check all permission states at once.
 ## Testing
 
 ```bash
-cargo test              # 12 unit tests (no permissions needed)
+cargo test              # 21 unit tests (no permissions needed)
 cargo test -- --ignored # Integration tests (needs macOS permissions)
 ```
 
@@ -150,20 +150,19 @@ cargo test -- --ignored # Integration tests (needs macOS permissions)
 - [x] permissions_status tool
 - [x] Install script (build + configure Claude Desktop/Code)
 
-### Phase 2: Messages + Mail + Notes + Location + Maps
-- [ ] SQLite helper (Messages chat.db, Notes NoteStore.sqlite, Mail Envelope Index)
-- [ ] MessagesService (4 tools) + tests
-- [ ] MailService (13 tools) + tests
-- [ ] NotesService (8 tools) + tests
-- [ ] LocationService (1 tool) + tests
-- [ ] MapsService (4 tools) + tests
-- [ ] E2E test harness
+### Phase 2: Messages + Mail + Notes + Location + Maps (Done)
+- [x] NotesService (8 tools) + tests - AppleScript CRUD
+- [x] MailService (13 tools) + tests - AppleScript for all operations
+- [x] MessagesService (4 tools) + tests - SQLite reads + AppleScript sends
+- [x] LocationService (1 tool) + tests - CoreLocation via Swift subprocess
+- [x] MapsService (4 tools) + tests - Apple Maps URL scheme
 
-### Phase 3: UI Automation
+### Phase 3: UI Automation (Next)
 - [ ] Accessibility API wrapper + XPath query engine
 - [ ] Ref ID system (B1=button, T1=textfield)
-- [ ] UI Viewer (6 tools) + UI Controller (10 tools)
-- [ ] UI diff engine
+- [ ] UI Viewer (6 tools): list_apps, get_frontmost, get_ui_tree, get_visible_text, find_elements, capture_snapshot
+- [ ] UI Controller (10 tools): click, type_text, press_key, scroll, drag, select_menu, manage_window, manage_app, file_dialog, dock
+- [ ] UI diff engine (show what changed after actions)
 
 ### Phase 4: Stickies + Shortcuts + Distribution
 - [ ] StickiesService (4 tools) + ShortcutsService (3 tools)

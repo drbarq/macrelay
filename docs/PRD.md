@@ -2,19 +2,24 @@
 
 ## Current Status (Updated 2026-04-10)
 
-**Phase 1 complete.** 18 tools shipped and working in Claude Desktop and Claude Code.
+**Phase 1 + 2 complete.** 48 tools shipped and working in Claude Desktop and Claude Code.
 
 | What | Status |
 |---|---|
-| Calendar (8 tools) | Done - list, search, create, reschedule, cancel, update, open, find_available_times |
-| Reminders (7 tools) | Done - list_lists, search, create, update, delete, complete, open |
-| Contacts (2 tools) | Done - search, get_all |
-| Permissions (1 tool) | Done - permissions_status |
+| Calendar (8 tools) | Done |
+| Reminders (7 tools) | Done |
+| Contacts (2 tools) | Done |
+| Permissions (1 tool) | Done |
+| Notes (8 tools) | Done - AppleScript CRUD |
+| Mail (13 tools) | Done - AppleScript for all operations |
+| Messages (4 tools) | Done - SQLite reads, AppleScript sends |
+| Location (1 tool) | Done - CoreLocation via Swift subprocess |
+| Maps (4 tools) | Done - Apple Maps URL scheme |
 | Install script | Done - builds, installs, configures Claude Desktop + Code |
-| Unit tests | 12 passing |
-| MCP protocol | Verified - 18 tools registered, initialize + tools/list working |
+| Unit tests | 21 passing |
+| MCP protocol | Verified - 48 tools registered |
 
-**Next up: Phase 2** (Messages, Mail, Notes, Location, Maps - 30 more tools)
+**Next up: Phase 3** (UI Automation - 16 tools: UI Viewer + UI Controller)
 
 ## 1. Overview
 
@@ -22,7 +27,7 @@ MacRelay is an open-source MCP (Model Context Protocol) server for macOS that gi
 
 ## 2. Goals
 
-1. **Feature parity with MacUse** - Target: 71 tools across 13 services (18 done, 53 remaining)
+1. **Feature parity with MacUse** - Target: 71 tools across 13 services (48 done, 23 remaining)
 2. **Non-technical user experience** - Setup script today, DMG + system tray planned for Phase 4
 3. **100% local** - No cloud, no telemetry, no subscriptions
 4. **Tested and reliable** - Unit tests per service, E2E harness planned for Phase 2
