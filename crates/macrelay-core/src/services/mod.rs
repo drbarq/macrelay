@@ -7,3 +7,5 @@ pub mod mail;
 pub mod messages;
 pub mod location;
 pub mod maps;
+pub mod ui_viewer;
+pub mod ui_controller;
