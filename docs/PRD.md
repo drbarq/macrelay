@@ -1,15 +1,31 @@
 # Product Requirements Document: mac-app-oss
 
+## Current Status (Updated 2026-04-10)
+
+**Phase 1 complete.** 18 tools shipped and working in Claude Desktop and Claude Code.
+
+| What | Status |
+|---|---|
+| Calendar (8 tools) | Done - list, search, create, reschedule, cancel, update, open, find_available_times |
+| Reminders (7 tools) | Done - list_lists, search, create, update, delete, complete, open |
+| Contacts (2 tools) | Done - search, get_all |
+| Permissions (1 tool) | Done - permissions_status |
+| Install script | Done - builds, installs, configures Claude Desktop + Code |
+| Unit tests | 12 passing |
+| MCP protocol | Verified - 18 tools registered, initialize + tools/list working |
+
+**Next up: Phase 2** (Messages, Mail, Notes, Location, Maps - 30 more tools)
+
 ## 1. Overview
 
 mac-app-oss is an open-source MCP (Model Context Protocol) server for macOS that gives AI assistants access to native Mac apps and universal UI control. It replaces the closed-source MacUse app ($39, macuse.app) with a fully local, privacy-first, open-source alternative.
 
 ## 2. Goals
 
-1. **Feature parity with MacUse** - All 55 tools across 12 services
-2. **Non-technical user experience** - DMG installer, system tray, permission wizard
+1. **Feature parity with MacUse** - Target: 71 tools across 13 services (18 done, 53 remaining)
+2. **Non-technical user experience** - Setup script today, DMG + system tray planned for Phase 4
 3. **100% local** - No cloud, no telemetry, no subscriptions
-4. **Tested and reliable** - Three-tier test strategy, tests per service
+4. **Tested and reliable** - Unit tests per service, E2E harness planned for Phase 2
 5. **Easy to contribute to** - Self-contained service modules, standard Rust toolchain
 
 ## 3. What We Learned from Dissecting MacUse

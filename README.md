@@ -11,31 +11,64 @@ mac-app-oss gives AI assistants direct access to your Mac's native apps and univ
 - **Calendar** - Create events, search schedules, find available times
 - **Reminders** - Create, complete, and manage reminders
 - **Contacts** - Search and browse your contacts
-- **Messages** - Search conversations, send iMessages
-- **Mail** - Search, read, compose, reply, forward emails
-- **Notes** - Search, read, create, and edit notes
-- **Maps** - Search places, get directions, find nearby POIs
-- **Location** - Get your current location
-- **UI Automation** - Click buttons, fill forms, navigate menus in any app
-- **Stickies** - List, read, create sticky notes
-- **Shortcuts** - List and run Siri Shortcuts
+- **Messages** - Search conversations, send iMessages *(Phase 2)*
+- **Mail** - Search, read, compose, reply, forward emails *(Phase 2)*
+- **Notes** - Search, read, create, and edit notes *(Phase 2)*
+- **Maps** - Search places, get directions, find nearby POIs *(Phase 2)*
+- **Location** - Get your current location *(Phase 2)*
+- **UI Automation** - Click buttons, fill forms, navigate menus in any app *(Phase 3)*
+- **Stickies** - List, read, create sticky notes *(Phase 4)*
+- **Shortcuts** - List and run Siri Shortcuts *(Phase 4)*
 
 Everything runs 100% locally on your Mac. No data leaves your machine.
 
-## Status
-
-**In development.** See [Roadmap](#roadmap) for current progress.
-
 ## Quick Start
 
-> Coming soon. Phase 1 is under development.
+**Requirements:** macOS 14+, Rust toolchain (1.85+), `jq`
 
-The goal is:
-1. Download the `.dmg`
-2. Drag to Applications
-3. Launch - system tray icon appears
-4. Click "Configure Claude Desktop" in the tray menu
-5. Start using your Mac's apps through Claude
+```bash
+# 1. Clone the repo
+git clone https://github.com/drbarq/mac-app-oss.git
+cd mac-app-oss
+
+# 2. Build, install, and configure Claude Desktop + Claude Code
+bash scripts/setup-claude.sh
+
+# 3. Restart Claude Desktop or Claude Code
+
+# 4. Try it out:
+#    "What's on my calendar this week?"
+#    "Create a reminder to buy groceries"
+#    "Find John's phone number"
+```
+
+The setup script:
+1. Builds the release binary
+2. Installs it to `~/.local/bin/macapp-server`
+3. Auto-configures Claude Desktop (`claude_desktop_config.json`)
+4. Auto-configures Claude Code (`~/.claude/mcp.json`)
+
+## Current Status
+
+**Phase 1 complete.** 18 tools working across Calendar, Reminders, Contacts, and Permissions.
+
+| Service | Tools | Status |
+|---|---|---|
+| **Calendar** (8) | list_calendars, search_events, create_event, reschedule_event, cancel_event, update_event, open_event, find_available_times | Done |
+| **Reminders** (7) | list_lists, search_reminders, create_reminder, update_reminder, delete_reminder, complete_reminder, open_reminder | Done |
+| **Contacts** (2) | search, get_all | Done |
+| **Permissions** (1) | permissions_status | Done |
+| **Messages** (4) | search_chats, get_chat, search_messages, send_messages | Phase 2 |
+| **Mail** (13) | list_accounts, list_mailboxes, search/get/compose/reply/forward/move/delete messages | Phase 2 |
+| **Notes** (8) | list/search/read/write/delete/restore notes | Phase 2 |
+| **Location** (1) | get_current | Phase 2 |
+| **Maps** (4) | search_places, get_directions, explore_places, calculate_eta | Phase 2 |
+| **UI Viewer** (6) | list_apps, get_frontmost, get_ui_tree, find_elements, capture_snapshot | Phase 3 |
+| **UI Controller** (10) | click, type_text, press_key, scroll, drag, select_menu, manage_window/app | Phase 3 |
+| **Stickies** (4) | list, read, create, open | Phase 4 |
+| **Shortcuts** (3) | list, get, run | Phase 4 |
+
+**Total: 18 / 71 tools implemented**
 
 ## Architecture
 
@@ -43,188 +76,116 @@ The goal is:
 
 We dissected the installed MacUse binary (v1.7.3) to understand exactly how it works:
 
-- **Tech stack:** Rust + Tauri v2, `rmcp` crate for MCP, SQLite for internal state
+- **MacUse is Rust/Tauri** (not Swift) using the `rmcp` crate for MCP
 - **Transports:** Streamable HTTP (background daemon) + stdio
-- **macOS integration:** EventKit, Contacts framework, CoreLocation, MapKit, Accessibility API, CGEvent, SQLite direct access to Messages/Notes/Mail databases, AppleScript/JXA for apps without framework APIs
+- **macOS integration:** AppleScript/JXA for Calendar, Reminders, Mail, Notes, Stickies; SQLite for Messages/Notes/Mail reads; Accessibility API + CGEvent for UI automation
 
-We're building the same thing, open-source, using the same proven technical approach.
+We're building the same thing, open-source, using the same proven approach.
 
 ### Tech Stack
 
 | Component | Technology | Why |
 |---|---|---|
-| Language | Rust | Best macOS FFI via objc2, high performance, matches MacUse |
-| MCP Server | rmcp crate | Same library MacUse uses, mature Rust MCP implementation |
-| macOS APIs | objc2 crate family | Type-safe Objective-C bindings for EventKit, Contacts, CoreLocation, MapKit |
-| Database Access | rusqlite | Read Messages (chat.db), Notes (NoteStore.sqlite), Mail (Envelope Index) |
-| UI Automation | Accessibility API + CGEvent | XPath queries on AX tree, mouse/keyboard simulation |
-| App GUI | Tauri v2 | System tray, settings UI, permission wizard |
-| Scripting | AppleScript/JXA | Fallback for apps without framework APIs (Mail, Notes writes, Stickies) |
+| Language | Rust (edition 2024) | Best macOS FFI via objc2, high performance |
+| MCP Server | rmcp 1.4 | Same library MacUse uses |
+| macOS APIs | AppleScript (Phase 1), objc2 (later) | AppleScript for fast iteration, objc2 for performance |
+| Database Access | rusqlite | Read Messages, Notes, Mail databases directly |
+| UI Automation | Accessibility API + CGEvent | XPath queries on AX tree, input simulation |
+| Scripting | AppleScript/JXA via osascript | Reliable cross-app automation |
 
-### Complete Tool Surface (55 tools across 12 services)
-
-| Service | # | Tools | Implementation |
-|---|---|---|---|
-| **Calendar** | 8 | list_calendars, search_events, create_event, reschedule_event, cancel_event, update_event, open_event, find_available_times | EventKit (EKEventStore with TTL cache), deep links |
-| **Reminders** | 7 | list_lists, search_reminders, create_reminder, update_reminder, delete_reminder, complete_reminder, open_reminder | EventKit, deep links |
-| **Notes** | 8 | list_accounts, list_folders, search_notes, read_note, write_note, delete_note, restore_note, open_note | SQLite for reads + AppleScript for writes |
-| **Mail** | 13 | list_accounts, list_mailboxes, search_messages, get_messages, get_thread, compose_message, reply_message, forward_message, update_read_state, move_message, delete_message, open_message, get_attachment | SQLite for search + AppleScript for actions |
-| **Messages** | 4 | search_chats, get_chat, search_messages, send_messages | SQLite (chat.db) for reads + Automation for sends |
-| **Contacts** | 2 | search, get_all | Contacts framework (CNContactStore with cache) |
-| **Maps** | 4 | search_places, get_directions, explore_places, calculate_eta | MapKit |
-| **Location** | 1 | get_current | CoreLocation |
-| **UI Viewer** | 6 | list_apps, get_frontmost, get_ui_tree, get_visible_text, find_elements, capture_snapshot | Accessibility API, XPath queries, ref IDs (B1, T1) |
-| **UI Controller** | 10 | click, type_text, press_key, scroll, drag, select_menu, manage_window, manage_app, file_dialog, dock | Accessibility actions + CGEvent, returns UI diffs |
-| **Stickies** | 4 | list, read, create, open | RTFD file reader + JXA scripts |
-| **Shortcuts** | 3 | list, get, run | /usr/bin/shortcuts CLI wrapper |
-
-### Key Design Patterns
-
-- **UI actions return diffs** - After clicking/typing, the response shows what changed in the UI
-- **Short ref IDs** - UI elements get IDs like B1 (button 1), T1 (text field 1) for easy AI referencing
-- **XPath queries** - Find UI elements with familiar syntax: `//AXButton[@AXTitle='Save']`
-- **Compact mode** - Reduce token usage for large UI trees
-- **Permission-aware** - Graceful errors with human-readable instructions when permissions are missing
-- **System tray** - Always visible status indicator so users know it's running
-
-## Project Structure
+### Project Structure
 
 ```
 mac-app-oss/
   Cargo.toml                        # Workspace root
   crates/
-    macapp-app/                     # Tauri app (system tray + settings UI)
-      src/
-        main.rs                     # Tauri entry, system tray, LaunchAgent
-        tray.rs                     # System tray icon + menu
-        setup.rs                    # First-run permission wizard
-        commands.rs                 # Tauri IPC commands
-      ui/                           # Frontend (HTML/JS)
-        index.html                  # Settings/status dashboard
-        setup.html                  # Permission wizard
-    macapp-server/                  # MCP server binary (standalone)
-      src/
-        main.rs                     # Entry point, stdio + HTTP transport
-        config.rs                   # CLI args, env vars
+    macapp-server/                  # MCP server binary
+      src/main.rs                   # Entry point, stdio transport, tool routing
     macapp-core/                    # Core library (all services)
       src/
-        lib.rs
         registry.rs                 # Service registry, tool routing
-        permissions.rs              # Permission checking/requesting
-        services/                   # One module per service, each with tests
-          calendar/
-          reminders/
-          notes/
-          mail/
-          messages/
-          contacts/
-          maps/
-          location/
-          ui_viewer/
-          ui_controller/
-          stickies/
-          shortcuts/
-        macos/                      # macOS API wrappers
-          eventkit.rs
-          contacts.rs
-          location.rs
-          mapkit.rs
-          accessibility.rs
-          sqlite.rs
-          applescript.rs
-          jxa.rs
-    macapp-test-harness/            # E2E MCP test client
-      src/lib.rs                    # Spawn server, send tool calls, validate
-      tests/                        # Per-service E2E tests
+        permissions.rs              # Permission checking with human-readable errors
+        services/
+          calendar/                 # 8 tools - AppleScript
+          reminders/                # 7 tools - AppleScript
+          contacts/                 # 2 tools - AppleScript
+          permissions_status.rs     # 1 tool - permission checker
+        macos/
+          applescript.rs            # osascript runner
+          eventkit.rs               # EventKit helpers
   scripts/
-    install.sh
-    build-dmg.sh
+    setup-claude.sh                 # Build + install + configure Claude
 ```
 
 ## Permissions
 
-mac-app-oss needs macOS permissions to access native apps. The first-run wizard walks you through each one:
+mac-app-oss uses AppleScript to interact with native apps. macOS will prompt you to grant Automation permission for each app the first time it's accessed.
 
-| Permission | Required For | How to Grant |
+| Permission | Required For | How It's Granted |
 |---|---|---|
-| Accessibility | UI automation (click, type, inspect) | System Settings > Privacy & Security > Accessibility |
-| Screen Recording | Screenshots | System Settings > Privacy & Security > Screen Recording |
-| Full Disk Access | Messages, Notes, Mail databases | System Settings > Privacy & Security > Full Disk Access |
-| Calendar | Calendar events | Prompted automatically on first use |
-| Reminders | Reminders | Prompted automatically on first use |
-| Contacts | Contacts | Prompted automatically on first use |
-| Location | Current location, Maps | Prompted automatically on first use |
+| Automation (Calendar) | Calendar tools | Prompted automatically on first use |
+| Automation (Reminders) | Reminder tools | Prompted automatically on first use |
+| Automation (Contacts) | Contact tools | Prompted automatically on first use |
+| Accessibility | UI automation (Phase 3) | System Settings > Privacy & Security > Accessibility |
+| Full Disk Access | Messages, Notes, Mail DBs (Phase 2) | System Settings > Privacy & Security > Full Disk Access |
 
-If a permission is missing, the tool returns a helpful error message explaining exactly what to enable and where.
+If a permission is missing, the tool returns a helpful error explaining exactly what to enable and where.
+
+Use the `permissions_status` tool to check all permission states at once.
 
 ## Testing
 
-Three tiers of tests ensure reliability:
+```bash
+cargo test              # 12 unit tests (no permissions needed)
+cargo test -- --ignored # Integration tests (needs macOS permissions)
+```
 
-| Tier | Command | What It Tests | Needs Permissions? |
-|---|---|---|---|
-| 1. Unit | `cargo test` | Parsing, serialization, query building | No |
-| 2. Integration | `cargo test -- --ignored` | Real macOS API calls, CRUD round-trips | Yes |
-| 3. E2E | `cargo test -p macapp-test-harness` | Full MCP JSON-RPC round-trips | Yes |
-
-Every service ships with tests. CI runs Tier 1; release gates on all three tiers.
+Every service ships with unit tests that validate tool schemas register correctly. 12 tests currently passing.
 
 ## Roadmap
 
-### Phase 1: MVP (In Progress)
-- [ ] Project scaffolding (Cargo workspace, Tauri app, rmcp server)
-- [ ] System tray with status indicator
-- [ ] First-run permission wizard
-- [ ] Permission manager
-- [ ] CalendarService (8 tools) + tests
-- [ ] RemindersService (7 tools) + tests
-- [ ] ContactsService (2 tools) + tests
-- [ ] MCP protocol tests
-- [ ] DMG installer + Claude Desktop auto-configuration
+### Phase 1: Calendar + Reminders + Contacts (Done)
+- [x] Cargo workspace (macapp-core + macapp-server)
+- [x] MCP server with rmcp 1.4 + stdio transport
+- [x] Service registry with dynamic tool routing
+- [x] Permission manager with human-readable errors
+- [x] CalendarService (8 tools) + tests
+- [x] RemindersService (7 tools) + tests
+- [x] ContactsService (2 tools) + tests
+- [x] permissions_status tool
+- [x] Install script (build + configure Claude Desktop/Code)
 
-**Exit criteria:** Drag .app to Applications, launch, see tray icon, use Calendar/Reminders/Contacts through Claude Desktop.
-
-### Phase 2: All Native Apps
-- [ ] SQLite helper (Messages, Notes, Mail DB access)
-- [ ] AppleScript runner
+### Phase 2: Messages + Mail + Notes + Location + Maps
+- [ ] SQLite helper (Messages chat.db, Notes NoteStore.sqlite, Mail Envelope Index)
 - [ ] MessagesService (4 tools) + tests
 - [ ] MailService (13 tools) + tests
 - [ ] NotesService (8 tools) + tests
 - [ ] LocationService (1 tool) + tests
 - [ ] MapsService (4 tools) + tests
-- [ ] E2E test suite
-
-**Exit criteria:** All native app tools working and tested.
+- [ ] E2E test harness
 
 ### Phase 3: UI Automation
-- [ ] Accessibility API wrapper
-- [ ] XPath query engine for AX tree
-- [ ] Ref ID system (B1, T1, etc.)
-- [ ] UI Viewer (6 tools) + tests
-- [ ] CGEvent input simulation
-- [ ] UI diff engine
-- [ ] UI Controller (10 tools) + tests
+- [ ] Accessibility API wrapper + XPath query engine
+- [ ] Ref ID system (B1=button, T1=textfield)
+- [ ] UI Viewer (6 tools): list_apps, get_frontmost, get_ui_tree, get_visible_text, find_elements, capture_snapshot
+- [ ] UI Controller (10 tools): click, type_text, press_key, scroll, drag, select_menu, manage_window/app, file_dialog, dock
+- [ ] UI diff engine (show what changed after actions)
 
-**Exit criteria:** Ask Claude to open an app, read its UI, and interact with it.
-
-### Phase 4: Polish + Distribution
+### Phase 4: Stickies + Shortcuts + Distribution
 - [ ] StickiesService (4 tools) + tests
 - [ ] ShortcutsService (3 tools) + tests
+- [ ] System tray app (Tauri) with status indicator
 - [ ] HTTP+SSE transport
 - [ ] Homebrew formula
 - [ ] GitHub Actions CI
-- [ ] Code signing + notarization
-
-**Exit criteria:** Feature parity with MacUse. `brew install mac-app-oss` works. DMG installs without Gatekeeper warnings.
+- [ ] DMG installer + code signing
 
 ## Contributing
 
-> Contributing guidelines coming soon.
-
 The project is structured so adding a new service is self-contained:
 1. Create a module in `crates/macapp-core/src/services/`
-2. Implement the service trait with tools
-3. Register in the service registry
+2. Implement tools following the pattern in `calendar/mod.rs`
+3. Register in `services/mod.rs` and `macapp-server/src/main.rs`
 4. Add tests
 5. No changes needed to server, transport, or protocol code
 
