@@ -9,10 +9,10 @@ use crate::registry::{ServiceRegistry, ToolHandler, error_result, schema_from_js
 /// Register all shortcuts tools with the service registry.
 pub fn register(registry: &mut ServiceRegistry) {
     registry.register(
-        "shortcuts_list",
+        "productivity_shortcuts_list",
         Tool::new(
-            "shortcuts_list",
-            "List all installed Shortcuts on this Mac.",
+            "productivity_shortcuts_list",
+            "[READ] List all installed Shortcuts on this Mac.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -27,10 +27,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "shortcuts_get",
+        "productivity_shortcuts_get",
         Tool::new(
-            "shortcuts_get",
-            "Get details about a specific shortcut by name. Verifies the shortcut exists and returns its name.",
+            "productivity_shortcuts_get",
+            "[READ] Get details about a specific shortcut by name. Verifies the shortcut exists and returns its name.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -46,10 +46,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "shortcuts_run",
+        "productivity_shortcuts_run",
         Tool::new(
-            "shortcuts_run",
-            "Run a shortcut by name. WARNING: This executes the shortcut with real effects on the system.",
+            "productivity_shortcuts_run",
+            "[UPDATE] Run a shortcut by name. WARNING: This executes the shortcut with real effects on the system.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -207,9 +207,9 @@ mod tests {
         assert_eq!(tools.len(), 3, "Expected exactly 3 shortcuts tools");
 
         let names: Vec<_> = tools.iter().map(|t| t.name.as_ref()).collect();
-        assert!(names.contains(&"shortcuts_list"));
-        assert!(names.contains(&"shortcuts_get"));
-        assert!(names.contains(&"shortcuts_run"));
+        assert!(names.contains(&"productivity_shortcuts_list"));
+        assert!(names.contains(&"productivity_shortcuts_get"));
+        assert!(names.contains(&"productivity_shortcuts_run"));
     }
 
     #[tokio::test]

@@ -24,7 +24,7 @@ fn reg() -> macrelay_core::registry::ServiceRegistry {
 #[ignore]
 async fn list_mail_accounts_returns_at_least_one() {
     let r = reg();
-    let result = call_ok(&r, "mail_list_accounts", json!({})).await;
+    let result = call_ok(&r, "communication_mail_list_accounts", json!({})).await;
     let text = result_text(&result);
     assert!(
         !text.trim().is_empty() && text.contains("Found"),
@@ -36,7 +36,7 @@ async fn list_mail_accounts_returns_at_least_one() {
 #[ignore]
 async fn list_mailboxes_returns_inbox() {
     let r = reg();
-    let result = call_ok(&r, "mail_list_mailboxes", json!({})).await;
+    let result = call_ok(&r, "communication_mail_list_mailboxes", json!({})).await;
     let text = result_text(&result);
     assert!(
         text.to_lowercase().contains("inbox"),
@@ -53,7 +53,7 @@ async fn compose_search_delete_round_trip() {
     // 1. Compose (Draft)
     let created = call_ok(
         &r,
-        "mail_compose_message",
+        "communication_mail_compose_message",
         json!({
             "to": "test@example.com",
             "subject": &subject,
@@ -68,7 +68,7 @@ async fn compose_search_delete_round_trip() {
     // we search Drafts or INBOX.
     let _search = call_ok(
         &r,
-        "mail_search_messages",
+        "communication_mail_search_messages",
         json!({ "subject": &subject, "mailbox": "Drafts" }),
     )
     .await;
@@ -77,7 +77,7 @@ async fn compose_search_delete_round_trip() {
     // We attempt deletion regardless of whether search found it, to ensure no leaks.
     best_effort(
         &r,
-        "mail_delete_message",
+        "communication_mail_delete_message",
         json!({ "subject": &subject, "mailbox": "Drafts" }),
     )
     .await;

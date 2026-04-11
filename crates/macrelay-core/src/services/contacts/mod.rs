@@ -8,10 +8,10 @@ use crate::registry::{ServiceRegistry, ToolHandler, error_result, schema_from_js
 /// Register all contacts tools with the service registry.
 pub fn register(registry: &mut ServiceRegistry) {
     registry.register(
-        "contacts_search",
+        "pim_contacts_search",
         Tool::new(
-            "contacts_search",
-            "Search contacts by name, phone number, or email address.",
+            "pim_contacts_search",
+            "[READ] Search contacts by name, phone number, or email address.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -27,10 +27,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "contacts_get_all",
+        "pim_contacts_get_all",
         Tool::new(
-            "contacts_get_all",
-            "Get all contacts. Returns names, phone numbers, and email addresses.",
+            "pim_contacts_get_all",
+            "[READ] Get all contacts. Returns names, phone numbers, and email addresses.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -141,8 +141,8 @@ mod tests {
         assert_eq!(tools.len(), 2);
 
         let names: Vec<_> = tools.iter().map(|t| t.name.as_ref()).collect();
-        assert!(names.contains(&"contacts_search"));
-        assert!(names.contains(&"contacts_get_all"));
+        assert!(names.contains(&"pim_contacts_search"));
+        assert!(names.contains(&"pim_contacts_get_all"));
     }
 
     #[tokio::test]

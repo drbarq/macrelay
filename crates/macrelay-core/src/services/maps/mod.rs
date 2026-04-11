@@ -8,10 +8,10 @@ use crate::registry::{ServiceRegistry, ToolHandler, error_result, schema_from_js
 /// Register all maps tools with the service registry.
 pub fn register(registry: &mut ServiceRegistry) {
     registry.register(
-        "map_search_places",
+        "navigation_map_search_places",
         Tool::new(
-            "map_search_places",
-            "Search for places or businesses using Apple Maps. Opens Maps.app with the search query and returns results.",
+            "navigation_map_search_places",
+            "[READ] Search for places or businesses using Apple Maps. Opens Maps.app with the search query and returns results.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -27,10 +27,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "map_get_directions",
+        "navigation_map_get_directions",
         Tool::new(
-            "map_get_directions",
-            "Get directions between two locations using Apple Maps. Opens Maps.app with turn-by-turn directions displayed.",
+            "navigation_map_get_directions",
+            "[READ] Get directions between two locations using Apple Maps. Opens Maps.app with turn-by-turn directions displayed.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -55,10 +55,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "map_explore_places",
+        "navigation_map_explore_places",
         Tool::new(
-            "map_explore_places",
-            "Explore nearby points of interest by category using Apple Maps. Opens Maps.app filtered to the specified category.",
+            "navigation_map_explore_places",
+            "[READ] Explore nearby points of interest by category using Apple Maps. Opens Maps.app filtered to the specified category.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -78,10 +78,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "map_calculate_eta",
+        "navigation_map_calculate_eta",
         Tool::new(
-            "map_calculate_eta",
-            "Calculate estimated travel time between two locations. Opens Apple Maps with directions so the ETA is displayed in the app.",
+            "navigation_map_calculate_eta",
+            "[READ] Calculate estimated travel time between two locations. Opens Apple Maps with directions so the ETA is displayed in the app.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -270,10 +270,10 @@ mod tests {
         assert_eq!(tools.len(), 4, "Expected exactly 4 maps tools");
 
         let names: Vec<_> = tools.iter().map(|t| t.name.as_ref()).collect();
-        assert!(names.contains(&"map_search_places"));
-        assert!(names.contains(&"map_get_directions"));
-        assert!(names.contains(&"map_explore_places"));
-        assert!(names.contains(&"map_calculate_eta"));
+        assert!(names.contains(&"navigation_map_search_places"));
+        assert!(names.contains(&"navigation_map_get_directions"));
+        assert!(names.contains(&"navigation_map_explore_places"));
+        assert!(names.contains(&"navigation_map_calculate_eta"));
     }
 
     #[test]

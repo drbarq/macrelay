@@ -9,10 +9,10 @@ use crate::registry::{ServiceRegistry, ToolHandler, error_result, schema_from_js
 /// Register all stickies tools with the service registry.
 pub fn register(registry: &mut ServiceRegistry) {
     registry.register(
-        "stickies_list",
+        "productivity_stickies_list",
         Tool::new(
-            "stickies_list",
-            "List all sticky notes. Reads the Stickies data directory to find available notes.",
+            "productivity_stickies_list",
+            "[READ] List all sticky notes. Reads the Stickies data directory to find available notes.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -31,10 +31,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "stickies_read",
+        "productivity_stickies_read",
         Tool::new(
-            "stickies_read",
-            "Read the content of a sticky note by its ID (directory name).",
+            "productivity_stickies_read",
+            "[READ] Read the content of a sticky note by its ID (directory name).",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -50,10 +50,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "stickies_create",
+        "productivity_stickies_create",
         Tool::new(
-            "stickies_create",
-            "Create a new sticky note by activating Stickies and typing content via System Events.",
+            "productivity_stickies_create",
+            "[CREATE] Create a new sticky note by activating Stickies and typing content via System Events.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -73,10 +73,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "stickies_open",
+        "productivity_stickies_open",
         Tool::new(
-            "stickies_open",
-            "Open the Stickies application.",
+            "productivity_stickies_open",
+            "[UPDATE] Open the Stickies application.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {}
@@ -205,10 +205,10 @@ mod tests {
         assert_eq!(tools.len(), 4, "Expected exactly 4 stickies tools");
 
         let names: Vec<_> = tools.iter().map(|t| t.name.as_ref()).collect();
-        assert!(names.contains(&"stickies_list"));
-        assert!(names.contains(&"stickies_read"));
-        assert!(names.contains(&"stickies_create"));
-        assert!(names.contains(&"stickies_open"));
+        assert!(names.contains(&"productivity_stickies_list"));
+        assert!(names.contains(&"productivity_stickies_read"));
+        assert!(names.contains(&"productivity_stickies_create"));
+        assert!(names.contains(&"productivity_stickies_open"));
     }
 
     #[tokio::test]

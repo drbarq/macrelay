@@ -23,7 +23,7 @@ async fn write_note_default_account_creates_and_is_searchable() {
 
     let result = call_ok(
         &r,
-        "notes_write_note",
+        "productivity_notes_write_note",
         json!({ "title": &title, "body": "integration body" }),
     )
     .await;
@@ -34,14 +34,24 @@ async fn write_note_default_account_creates_and_is_searchable() {
         "expected account attribution: {text}"
     );
 
-    let search = call_ok(&r, "notes_search_notes", json!({ "query": &title })).await;
+    let search = call_ok(
+        &r,
+        "productivity_notes_search_notes",
+        json!({ "query": &title }),
+    )
+    .await;
     assert!(
         result_text(&search).contains(&title),
         "search did not surface the created note: {}",
         result_text(&search)
     );
 
-    best_effort(&r, "notes_delete_note", json!({ "name": &title })).await;
+    best_effort(
+        &r,
+        "productivity_notes_delete_note",
+        json!({ "name": &title }),
+    )
+    .await;
 }
 
 #[tokio::test]
@@ -52,7 +62,7 @@ async fn write_note_with_bogus_account_returns_clear_guided_error() {
 
     let result = call_err(
         &r,
-        "notes_write_note",
+        "productivity_notes_write_note",
         json!({
             "title": &title,
             "body": "body",
@@ -67,7 +77,7 @@ async fn write_note_with_bogus_account_returns_clear_guided_error() {
         "error should name the missing account: {text}"
     );
     assert!(
-        text.contains("notes_list_accounts"),
+        text.contains("productivity_notes_list_accounts"),
         "error should point user at notes_list_accounts: {text}"
     );
 }
@@ -81,7 +91,7 @@ async fn write_note_with_explicit_icloud_account_attributes_correctly() {
 
     let result = call(
         &r,
-        "notes_write_note",
+        "productivity_notes_write_note",
         json!({ "title": &title, "body": "body", "account": "iCloud" }),
     )
     .await;
@@ -95,7 +105,12 @@ async fn write_note_with_explicit_icloud_account_attributes_correctly() {
     } else {
         assert!(text.contains("iCloud"), "should attribute iCloud: {text}");
         assert!(text.contains(&title));
-        best_effort(&r, "notes_delete_note", json!({ "name": &title })).await;
+        best_effort(
+            &r,
+            "productivity_notes_delete_note",
+            json!({ "name": &title }),
+        )
+        .await;
     }
 }
 
@@ -107,14 +122,24 @@ async fn write_delete_restore_round_trip_end_to_end() {
 
     call_ok(
         &r,
-        "notes_write_note",
+        "productivity_notes_write_note",
         json!({ "title": &title, "body": "round trip" }),
     )
     .await;
 
-    call_ok(&r, "notes_delete_note", json!({ "name": &title })).await;
+    call_ok(
+        &r,
+        "productivity_notes_delete_note",
+        json!({ "name": &title }),
+    )
+    .await;
 
-    let restored = call_ok(&r, "notes_restore_note", json!({ "name": &title })).await;
+    let restored = call_ok(
+        &r,
+        "productivity_notes_restore_note",
+        json!({ "name": &title }),
+    )
+    .await;
     let text = result_text(&restored);
     assert!(
         text.contains(&title),
@@ -125,5 +150,10 @@ async fn write_delete_restore_round_trip_end_to_end() {
         "restore result should include account attribution: {text}"
     );
 
-    best_effort(&r, "notes_delete_note", json!({ "name": &title })).await;
+    best_effort(
+        &r,
+        "productivity_notes_delete_note",
+        json!({ "name": &title }),
+    )
+    .await;
 }

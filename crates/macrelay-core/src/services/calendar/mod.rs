@@ -10,10 +10,10 @@ use crate::registry::{ServiceRegistry, ToolHandler, error_result, schema_from_js
 /// Register all calendar tools with the service registry.
 pub fn register(registry: &mut ServiceRegistry) {
     registry.register(
-        "calendar_list_calendars",
+        "pim_calendar_list_calendars",
         Tool::new(
-            "calendar_list_calendars",
-            "List all calendars available on this Mac.",
+            "pim_calendar_list_calendars",
+            "[READ] List all calendars available on this Mac.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {},
@@ -23,10 +23,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "calendar_search_events",
+        "pim_calendar_search_events",
         Tool::new(
-            "calendar_search_events",
-            "Search calendar events within a date range. Returns matching events with title, time, location, and notes.",
+            "pim_calendar_search_events",
+            "[READ] Search calendar events within a date range. Returns matching events with title, time, location, and notes.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -53,10 +53,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "calendar_create_event",
+        "pim_calendar_create_event",
         Tool::new(
-            "calendar_create_event",
-            "Create a new calendar event.",
+            "pim_calendar_create_event",
+            "[CREATE] Create a new calendar event.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -92,10 +92,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "calendar_reschedule_event",
+        "pim_calendar_reschedule_event",
         Tool::new(
-            "calendar_reschedule_event",
-            "Find a calendar event by title and change its start and end dates.",
+            "pim_calendar_reschedule_event",
+            "[UPDATE] Find a calendar event by title and change its start and end dates.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -119,10 +119,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "calendar_cancel_event",
+        "pim_calendar_cancel_event",
         Tool::new(
-            "calendar_cancel_event",
-            "Delete a calendar event by title.",
+            "pim_calendar_cancel_event",
+            "[DELETE] Delete a calendar event by title.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -138,10 +138,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "calendar_update_event",
+        "pim_calendar_update_event",
         Tool::new(
-            "calendar_update_event",
-            "Update properties of a calendar event found by title. Can change the title, location, and notes.",
+            "pim_calendar_update_event",
+            "[UPDATE] Update properties of a calendar event found by title. Can change the title, location, and notes.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -169,10 +169,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "calendar_open_event",
+        "pim_calendar_open_event",
         Tool::new(
-            "calendar_open_event",
-            "Open Calendar.app and navigate to the date of an event found by title.",
+            "pim_calendar_open_event",
+            "[READ] Open Calendar.app and navigate to the date of an event found by title.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -188,10 +188,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "calendar_find_available_times",
+        "pim_calendar_find_available_times",
         Tool::new(
-            "calendar_find_available_times",
-            "Find free time slots within a date range by checking existing calendar events. Returns available blocks of time.",
+            "pim_calendar_find_available_times",
+            "[READ] Find free time slots within a date range by checking existing calendar events. Returns available blocks of time.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -755,14 +755,14 @@ mod tests {
         assert_eq!(tools.len(), 8, "Expected exactly 8 calendar tools");
 
         let names: Vec<_> = tools.iter().map(|t| t.name.as_ref()).collect();
-        assert!(names.contains(&"calendar_list_calendars"));
-        assert!(names.contains(&"calendar_search_events"));
-        assert!(names.contains(&"calendar_create_event"));
-        assert!(names.contains(&"calendar_reschedule_event"));
-        assert!(names.contains(&"calendar_cancel_event"));
-        assert!(names.contains(&"calendar_update_event"));
-        assert!(names.contains(&"calendar_open_event"));
-        assert!(names.contains(&"calendar_find_available_times"));
+        assert!(names.contains(&"pim_calendar_list_calendars"));
+        assert!(names.contains(&"pim_calendar_search_events"));
+        assert!(names.contains(&"pim_calendar_create_event"));
+        assert!(names.contains(&"pim_calendar_reschedule_event"));
+        assert!(names.contains(&"pim_calendar_cancel_event"));
+        assert!(names.contains(&"pim_calendar_update_event"));
+        assert!(names.contains(&"pim_calendar_open_event"));
+        assert!(names.contains(&"pim_calendar_find_available_times"));
     }
 
     #[tokio::test]

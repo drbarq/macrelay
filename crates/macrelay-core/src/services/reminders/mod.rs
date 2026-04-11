@@ -9,10 +9,10 @@ use crate::registry::{ServiceRegistry, ToolHandler, error_result, schema_from_js
 /// Register all reminder tools with the service registry.
 pub fn register(registry: &mut ServiceRegistry) {
     registry.register(
-        "reminders_list_lists",
+        "pim_reminders_list_lists",
         Tool::new(
-            "reminders_list_lists",
-            "List all reminder lists.",
+            "pim_reminders_list_lists",
+            "[READ] List all reminder lists.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {},
@@ -22,10 +22,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "reminders_search_reminders",
+        "pim_reminders_search_reminders",
         Tool::new(
-            "reminders_search_reminders",
-            "Search and filter reminders. Returns incomplete reminders by default.",
+            "pim_reminders_search_reminders",
+            "[READ] Search and filter reminders. Returns incomplete reminders by default.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -48,10 +48,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "reminders_create_reminder",
+        "pim_reminders_create_reminder",
         Tool::new(
-            "reminders_create_reminder",
-            "Create a new reminder with title and optional details.",
+            "pim_reminders_create_reminder",
+            "[CREATE] Create a new reminder with title and optional details.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -80,10 +80,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "reminders_complete_reminder",
+        "pim_reminders_complete_reminder",
         Tool::new(
-            "reminders_complete_reminder",
-            "Mark a reminder as complete without deleting it.",
+            "pim_reminders_complete_reminder",
+            "[UPDATE] Mark a reminder as complete without deleting it.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -99,10 +99,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "reminders_update_reminder",
+        "pim_reminders_update_reminder",
         Tool::new(
-            "reminders_update_reminder",
-            "Update a reminder's properties. Finds the reminder by its current title.",
+            "pim_reminders_update_reminder",
+            "[UPDATE] Update a reminder's properties. Finds the reminder by its current title.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -131,10 +131,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "reminders_delete_reminder",
+        "pim_reminders_delete_reminder",
         Tool::new(
-            "reminders_delete_reminder",
-            "Permanently delete a reminder by title.",
+            "pim_reminders_delete_reminder",
+            "[DELETE] Permanently delete a reminder by title.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -150,10 +150,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "reminders_open_reminder",
+        "pim_reminders_open_reminder",
         Tool::new(
-            "reminders_open_reminder",
-            "Open the Reminders app.",
+            "pim_reminders_open_reminder",
+            "[UPDATE] Open the Reminders app.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {},
@@ -509,13 +509,13 @@ mod tests {
         assert!(tools.len() >= 7, "Expected at least 7 reminder tools");
 
         let names: Vec<_> = tools.iter().map(|t| t.name.as_ref()).collect();
-        assert!(names.contains(&"reminders_list_lists"));
-        assert!(names.contains(&"reminders_search_reminders"));
-        assert!(names.contains(&"reminders_create_reminder"));
-        assert!(names.contains(&"reminders_complete_reminder"));
-        assert!(names.contains(&"reminders_update_reminder"));
-        assert!(names.contains(&"reminders_delete_reminder"));
-        assert!(names.contains(&"reminders_open_reminder"));
+        assert!(names.contains(&"pim_reminders_list_lists"));
+        assert!(names.contains(&"pim_reminders_search_reminders"));
+        assert!(names.contains(&"pim_reminders_create_reminder"));
+        assert!(names.contains(&"pim_reminders_complete_reminder"));
+        assert!(names.contains(&"pim_reminders_update_reminder"));
+        assert!(names.contains(&"pim_reminders_delete_reminder"));
+        assert!(names.contains(&"pim_reminders_open_reminder"));
     }
 
     #[tokio::test]

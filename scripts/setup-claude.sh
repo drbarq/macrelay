@@ -24,29 +24,23 @@ cp "$BUILT_BINARY" "$INSTALL_PATH"
 chmod +x "$INSTALL_PATH"
 echo "Installed $BINARY_NAME to $INSTALL_PATH"
 
-# ── Helper: upsert the MCP server entry in a JSON config file ───────────────
+# ── Helper: upsert an MCP server entry ───────────────────────────────────────
 
 upsert_mcp_config() {
     local config_path="$1"
     local label="$2"
 
     local mcp_entry
-    mcp_entry=$(cat <<ENTRY
-{"command":"$INSTALL_PATH"}
-ENTRY
-)
+    mcp_entry=$(jq -n --arg cmd "$INSTALL_PATH" '{"command":$cmd}')
 
     if [ -f "$config_path" ]; then
-        # File exists – merge into .mcpServers
         local tmp
         tmp=$(mktemp)
-        # Ensure .mcpServers exists then set the key
         jq --argjson entry "$mcp_entry" \
            ".mcpServers //= {} | .mcpServers[\"$MCP_KEY\"] = \$entry" \
            "$config_path" > "$tmp" && mv "$tmp" "$config_path"
-        echo "  Updated existing $label config: $config_path"
+        echo "  Updated $label config: $config_path"
     else
-        # File does not exist – create it
         mkdir -p "$(dirname "$config_path")"
         jq -n --argjson entry "$mcp_entry" \
            "{mcpServers: {\"$MCP_KEY\": \$entry}}" > "$config_path"
@@ -54,26 +48,31 @@ ENTRY
     fi
 }
 
-# ── 3. Configure Claude Desktop ─────────────────────────────────────────────
+# ── 3. Cleanup old grouped connectors ───────────────────────────────────────
+
+clean_grouped_configs() {
+    local config_path="$1"
+    if [ -f "$config_path" ]; then
+        local tmp
+        tmp=$(mktemp)
+        jq 'del(.mcpServers["macrelay-pim", "macrelay-communication", "macrelay-productivity", "macrelay-navigation", "macrelay-ui", "macrelay-system"])' \
+           "$config_path" > "$tmp" && mv "$tmp" "$config_path"
+    fi
+}
+
+# ── 4. Configuration Logic ──────────────────────────────────────────────────
 
 CLAUDE_DESKTOP_CONFIG="$HOME/Library/Application Support/Claude/claude_desktop_config.json"
-
-echo ""
-echo "Configuring Claude Desktop..."
-if [ -f "$CLAUDE_DESKTOP_CONFIG" ]; then
-    upsert_mcp_config "$CLAUDE_DESKTOP_CONFIG" "Claude Desktop"
-else
-    echo "  Claude Desktop config not found at:"
-    echo "    $CLAUDE_DESKTOP_CONFIG"
-    echo "  Skipping. (Install Claude Desktop first, then re-run this script.)"
-fi
-
-# ── 4. Configure Claude Code ────────────────────────────────────────────────
-
 CLAUDE_CODE_CONFIG="$HOME/.claude/mcp.json"
 
-echo ""
-echo "Configuring Claude Code..."
+echo "Cleaning up old grouped connectors..."
+clean_grouped_configs "$CLAUDE_DESKTOP_CONFIG"
+clean_grouped_configs "$CLAUDE_CODE_CONFIG"
+
+echo "Configuring monolithic MacRelay..."
+if [ -f "$CLAUDE_DESKTOP_CONFIG" ]; then
+    upsert_mcp_config "$CLAUDE_DESKTOP_CONFIG" "Claude Desktop"
+fi
 upsert_mcp_config "$CLAUDE_CODE_CONFIG" "Claude Code"
 
 # ── Done ─────────────────────────────────────────────────────────────────────
@@ -82,10 +81,6 @@ echo ""
 echo "Setup complete!"
 echo ""
 echo "  Binary installed to:  $INSTALL_PATH"
-echo "  MCP server key:       $MCP_KEY"
+echo "  Registered as:        $MCP_KEY (monolithic)"
 echo ""
-echo "  The following MCP configs were updated:"
-[ -f "$CLAUDE_DESKTOP_CONFIG" ] && echo "    - Claude Desktop: $CLAUDE_DESKTOP_CONFIG"
-echo "    - Claude Code:    $CLAUDE_CODE_CONFIG"
-echo ""
-echo "  Restart Claude Desktop / Claude Code to pick up the new server."
+echo "  Restart Claude Desktop / Claude Code to see all 71 tools under ONE extension."

@@ -4,7 +4,7 @@
 
 MacRelay is an open-source MCP server that relays AI commands to native macOS apps. It's a local, privacy-first replacement for MacUse (macuse.app, $39).
 
-**Current state:** Feature complete. 71 tools across 13 services. Binary at `~/.local/bin/macrelay`, configured for Claude Desktop and Claude Code.
+**Current state:** Feature complete. 71 tools across 13 services. All tools use full category prefixes (e.g., `communication_mail_...`) for perfect alphabetical grouping in Claude Desktop.
 
 ## Tech Stack
 
@@ -21,43 +21,34 @@ MacRelay is an open-source MCP server that relays AI commands to native macOS ap
 ```bash
 cargo build                    # Debug build
 cargo build --release          # Release build (~4MB binary)
-cargo test -p macrelay-core --lib                                  # 137 CI-safe tests, ~10s, no permissions
-cargo test -p macrelay-core --all-targets -- --include-ignored     # All 166 (includes 29 Tier 3 local-only)
-cargo fmt -- --check && cargo clippy --all-targets -- -D warnings  # The other two CI gates
-bash scripts/setup-claude.sh   # Build + install + configure Claude Desktop/Code
+cargo test -p macrelay-core --lib                                  # 137 CI-safe tests
+cargo test -p macrelay-core --all-targets -- --include-ignored     # All 166 (includes Tier 3)
+cargo fmt -- --check && cargo clippy --all-targets -- -D warnings  # CI gates
+bash scripts/setup-claude.sh   # Rebuild and refresh monolithic config
 ```
+
+## Tool Naming (Alphabetical Grouping)
+
+Tools are prefixed by category to ensure they appear grouped in the UI:
+- `communication_` (Mail, Messages)
+- `navigation_` (Maps, Location)
+- `pim_` (Calendar, Reminders, Contacts)
+- `productivity_` (Notes, Stickies, Shortcuts)
+- `system_` (Permissions Status)
+- `ui_` (Viewer, Controller)
 
 ## Testing Strategy
 
 - **Tier 1 (Pure Unit):** Helper functions, schema validation.
 - **Tier 2 (Mock Runner):** Intercepts AppleScript/JXA. **Must** assert script content.
 - **Tier 3 (Integration):** Local-only, hits real apps. **Must** clean up all created data.
-- **Rule:** Every tool MUST have Tier 1/2 coverage before shipping.
 - **Stability:** Tools return `Ok(error_result)` for missing args, not protocol `Err`.
-
-## Services (13 services, 71 tools)
-
-| Service | Tools | Implementation |
-|---|---|---|
-| calendar (8) | list/search/create/reschedule/cancel/update/open events, find_available_times | AppleScript |
-| reminders (7) | list/search/create/update/delete/complete/open reminders | AppleScript |
-| contacts (2) | search, get_all | AppleScript |
-| notes (8) | list_accounts/folders, search/read/write/delete/restore/open notes | AppleScript |
-| mail (13) | list_accounts/mailboxes, search/get/thread/compose/reply/forward/read_state/move/delete/open messages, get_attachment | AppleScript |
-| messages (4) | search_chats/messages, get_chat, send_message | SQLite + AppleScript |
-| location (1) | get_current | CoreLocation via Swift |
-| maps (4) | search_places, get_directions, explore_places, calculate_eta | Maps URL scheme |
-| ui_viewer (6) | list_apps, get_frontmost, get_ui_tree, get_visible_text, find_elements, capture_snapshot | System Events + JXA |
-| ui_controller (10) | click, type_text, press_key, scroll, drag, select_menu, manage_window/app, file_dialog, dock | System Events |
-| stickies (4) | list, read, create, open | RTFD files + JXA |
-| shortcuts (3) | list, get, run | /usr/bin/shortcuts CLI |
-| permissions (1) | permissions_status | Native checks |
 
 ## Key Directories
 
 - `crates/macrelay-core/src/services/` - 13 service modules
 - `crates/macrelay-core/src/macos/` - applescript.rs, escape.rs, eventkit.rs
-- `crates/macrelay-core/src/registry.rs` - ServiceRegistry with dynamic tool routing
+- `crates/macrelay-core/src/registry.rs` - ServiceRegistry with alphabetical sorting
 - `crates/macrelay-core/src/permissions.rs` - Permission checking
 - `crates/macrelay-server/src/main.rs` - MCP ServerHandler impl
 - `scripts/setup-claude.sh` - Install + configure
@@ -65,18 +56,10 @@ bash scripts/setup-claude.sh   # Build + install + configure Claude Desktop/Code
 ## Architecture Notes
 
 - Server implements `rmcp::handler::server::ServerHandler` trait
-- Tools registered dynamically via `ServiceRegistry` (not rmcp macros)
-- Each service: `pub fn register(registry: &mut ServiceRegistry)`
+- Tools registered dynamically via `ServiceRegistry`
+- `ServiceRegistry::list_tools()` sorts alphabetically by name
 - Schemas: `schema_from_json(json!({...}))` -> `Arc<JsonObject>`
 - Results: `text_result()` / `error_result()` helpers
 - AppleScript field delimiter: `||`
 - Server logs to stderr, MCP JSON-RPC to stdout
 - Binary name: `macrelay`
-
-## Adding New Services
-
-1. Create `crates/macrelay-core/src/services/myservice/mod.rs`
-2. Implement `pub fn register(registry: &mut ServiceRegistry)` with tools
-3. Add `pub mod myservice;` to `services/mod.rs`
-4. Add `macrelay_core::services::myservice::register(&mut registry);` to `main.rs`
-5. Add tests in `#[cfg(test)] mod tests` (Tier 1/2)

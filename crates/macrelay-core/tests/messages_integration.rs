@@ -30,7 +30,7 @@ async fn search_chats_runs_without_panic() {
     // Even if it returns "No chats found", we're testing the SQLite connection logic.
     let result = r
         .call_tool(
-            "messages_search_chats",
+            "communication_messages_search_chats",
             args(json!({ "query": "a", "limit": 1 })),
         )
         .await;
@@ -56,7 +56,7 @@ async fn search_messages_runs_without_panic() {
     let r = reg();
     let result = r
         .call_tool(
-            "messages_search_messages",
+            "communication_messages_search_messages",
             args(json!({ "query": "hello", "limit": 1 })),
         )
         .await;

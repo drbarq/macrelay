@@ -8,10 +8,10 @@ use crate::registry::{ServiceRegistry, ToolHandler, error_result, schema_from_js
 /// Register all location tools with the service registry.
 pub fn register(registry: &mut ServiceRegistry) {
     registry.register(
-        "location_get_current",
+        "navigation_location_get_current",
         Tool::new(
-            "location_get_current",
-            "Get the current geographic location of this Mac (latitude, longitude, and accuracy in meters). Requires Location Services to be enabled in System Settings.",
+            "navigation_location_get_current",
+            "[READ] Get the current geographic location of this Mac (latitude, longitude, and accuracy in meters). Requires Location Services to be enabled in System Settings.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {},
@@ -129,7 +129,7 @@ mod tests {
         assert_eq!(tools.len(), 1, "Expected exactly 1 location tool");
 
         let names: Vec<_> = tools.iter().map(|t| t.name.as_ref()).collect();
-        assert!(names.contains(&"location_get_current"));
+        assert!(names.contains(&"navigation_location_get_current"));
     }
 
     #[tokio::test]

@@ -9,10 +9,10 @@ use crate::registry::{ServiceRegistry, ToolHandler, error_result, schema_from_js
 /// Register all Notes tools with the service registry.
 pub fn register(registry: &mut ServiceRegistry) {
     registry.register(
-        "notes_list_accounts",
+        "productivity_notes_list_accounts",
         Tool::new(
-            "notes_list_accounts",
-            "List all Notes accounts (e.g. iCloud, On My Mac, Gmail).",
+            "productivity_notes_list_accounts",
+            "[READ] List all Notes accounts (e.g. iCloud, On My Mac, Gmail).",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {},
@@ -22,10 +22,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "notes_list_folders",
+        "productivity_notes_list_folders",
         Tool::new(
-            "notes_list_folders",
-            "List all folders across all Notes accounts.",
+            "productivity_notes_list_folders",
+            "[READ] List all folders across all Notes accounts.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {},
@@ -35,10 +35,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "notes_search_notes",
+        "productivity_notes_search_notes",
         Tool::new(
-            "notes_search_notes",
-            "Search notes by text query. Returns matching note names with their folder and account.",
+            "productivity_notes_search_notes",
+            "[READ] Search notes by text query. Returns matching note names with their folder and account.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -66,10 +66,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "notes_read_note",
+        "productivity_notes_read_note",
         Tool::new(
-            "notes_read_note",
-            "Read the full content of a note by its name. Returns the HTML body of the note.",
+            "productivity_notes_read_note",
+            "[READ] Read the full content of a note by its name. Returns the HTML body of the note.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -85,10 +85,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "notes_write_note",
+        "productivity_notes_write_note",
         Tool::new(
-            "notes_write_note",
-            "Create a new note with a title and HTML body. Optionally specify a folder and account.",
+            "productivity_notes_write_note",
+            "[CREATE] Create a new note with a title and HTML body. Optionally specify a folder and account.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -116,10 +116,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "notes_delete_note",
+        "productivity_notes_delete_note",
         Tool::new(
-            "notes_delete_note",
-            "Delete a note by name. The note is moved to Recently Deleted.",
+            "productivity_notes_delete_note",
+            "[DELETE] Delete a note by name. The note is moved to Recently Deleted.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -135,10 +135,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "notes_restore_note",
+        "productivity_notes_restore_note",
         Tool::new(
-            "notes_restore_note",
-            "Restore a note from Recently Deleted by moving it back to a target folder and account.",
+            "productivity_notes_restore_note",
+            "[UPDATE] Restore a note from Recently Deleted by moving it back to a target folder and account.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -162,10 +162,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "notes_open_note",
+        "productivity_notes_open_note",
         Tool::new(
-            "notes_open_note",
-            "Open Notes.app and display a specific note by name.",
+            "productivity_notes_open_note",
+            "[READ] Open Notes.app and display a specific note by name.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -780,14 +780,14 @@ mod tests {
         assert_eq!(tools.len(), 8, "Expected exactly 8 notes tools");
 
         let names: Vec<_> = tools.iter().map(|t| t.name.as_ref()).collect();
-        assert!(names.contains(&"notes_list_accounts"));
-        assert!(names.contains(&"notes_list_folders"));
-        assert!(names.contains(&"notes_search_notes"));
-        assert!(names.contains(&"notes_read_note"));
-        assert!(names.contains(&"notes_write_note"));
-        assert!(names.contains(&"notes_delete_note"));
-        assert!(names.contains(&"notes_restore_note"));
-        assert!(names.contains(&"notes_open_note"));
+        assert!(names.contains(&"productivity_notes_list_accounts"));
+        assert!(names.contains(&"productivity_notes_list_folders"));
+        assert!(names.contains(&"productivity_notes_search_notes"));
+        assert!(names.contains(&"productivity_notes_read_note"));
+        assert!(names.contains(&"productivity_notes_write_note"));
+        assert!(names.contains(&"productivity_notes_delete_note"));
+        assert!(names.contains(&"productivity_notes_restore_note"));
+        assert!(names.contains(&"productivity_notes_open_note"));
     }
 
     #[test]
@@ -796,7 +796,10 @@ mod tests {
         register(&mut registry);
         let tools = registry.list_tools();
 
-        for tool_name in &["notes_write_note", "notes_restore_note"] {
+        for tool_name in &[
+            "productivity_notes_write_note",
+            "productivity_notes_restore_note",
+        ] {
             let tool = tools
                 .iter()
                 .find(|t| t.name.as_ref() == *tool_name)

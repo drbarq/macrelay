@@ -9,10 +9,10 @@ use crate::registry::{ServiceRegistry, schema_from_json, text_result};
 /// Register the permissions_status tool with the service registry.
 pub fn register(registry: &mut ServiceRegistry) {
     registry.register(
-        "permissions_status",
+        "system_permissions_status",
         Tool::new(
-            "permissions_status",
-            "Check and return the status of all macOS permissions required by mac-app-oss.",
+            "system_permissions_status",
+            "[SYSTEM] Check and return the status of all macOS permissions required by mac-app-oss.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {},
@@ -65,7 +65,7 @@ mod tests {
         register(&mut registry);
         let tools = registry.list_tools();
         assert_eq!(tools.len(), 1);
-        assert_eq!(tools[0].name.as_ref(), "permissions_status");
+        assert_eq!(tools[0].name.as_ref(), "system_permissions_status");
     }
 
     #[tokio::test]

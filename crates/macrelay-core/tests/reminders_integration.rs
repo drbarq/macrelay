@@ -23,7 +23,7 @@ fn reg() -> macrelay_core::registry::ServiceRegistry {
 #[ignore]
 async fn list_reminders_lists_returns_at_least_one() {
     let r = reg();
-    let result = call_ok(&r, "reminders_list_lists", json!({})).await;
+    let result = call_ok(&r, "pim_reminders_list_lists", json!({})).await;
     let text = result_text(&result);
     assert!(
         !text.trim().is_empty() && text.contains("Found"),
@@ -40,7 +40,7 @@ async fn create_search_complete_delete_round_trip() {
     // 1. Create
     let created = call_ok(
         &r,
-        "reminders_create_reminder",
+        "pim_reminders_create_reminder",
         json!({
             "title": &title,
             "notes": "macrelay integration test"
@@ -50,13 +50,18 @@ async fn create_search_complete_delete_round_trip() {
     assert!(result_text(&created).contains(&title));
 
     // 2. Search
-    let search = call_ok(&r, "reminders_search_reminders", json!({ "query": &title })).await;
+    let search = call_ok(
+        &r,
+        "pim_reminders_search_reminders",
+        json!({ "query": &title }),
+    )
+    .await;
     assert!(result_text(&search).contains(&title));
 
     // 3. Complete
     let completed = call_ok(
         &r,
-        "reminders_complete_reminder",
+        "pim_reminders_complete_reminder",
         json!({ "title": &title }),
     )
     .await;
@@ -66,7 +71,12 @@ async fn create_search_complete_delete_round_trip() {
     );
 
     // 4. Delete
-    let deleted = call_ok(&r, "reminders_delete_reminder", json!({ "title": &title })).await;
+    let deleted = call_ok(
+        &r,
+        "pim_reminders_delete_reminder",
+        json!({ "title": &title }),
+    )
+    .await;
     assert!(
         result_text(&deleted).to_lowercase().contains("deleted")
             || result_text(&deleted).contains(&title)
@@ -80,11 +90,16 @@ async fn create_update_delete_round_trip() {
     let title = unique_tag("rem-update");
     let new_title = format!("{}-updated", title);
 
-    call_ok(&r, "reminders_create_reminder", json!({ "title": &title })).await;
+    call_ok(
+        &r,
+        "pim_reminders_create_reminder",
+        json!({ "title": &title }),
+    )
+    .await;
 
     let updated = call_ok(
         &r,
-        "reminders_update_reminder",
+        "pim_reminders_update_reminder",
         json!({
             "title": &title,
             "new_title": &new_title,
@@ -96,9 +111,14 @@ async fn create_update_delete_round_trip() {
 
     best_effort(
         &r,
-        "reminders_delete_reminder",
+        "pim_reminders_delete_reminder",
         json!({ "title": &new_title }),
     )
     .await;
-    best_effort(&r, "reminders_delete_reminder", json!({ "title": &title })).await;
+    best_effort(
+        &r,
+        "pim_reminders_delete_reminder",
+        json!({ "title": &title }),
+    )
+    .await;
 }

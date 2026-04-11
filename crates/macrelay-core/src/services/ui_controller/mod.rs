@@ -43,10 +43,10 @@ fn key_name_to_code(name: &str) -> Option<u8> {
 pub fn register(registry: &mut ServiceRegistry) {
     // 1. Click at coordinates or on an element
     registry.register(
-        "ui_controller_click",
+        "ui_ui_controller_click",
         Tool::new(
-            "ui_controller_click",
-            "Click at screen coordinates or on a named UI element within an application. Provide either x/y coordinates, or app_name + element_name to click a specific button/element.",
+            "ui_ui_controller_click",
+            "[UPDATE] Click at screen coordinates or on a named UI element within an application. Provide either x/y coordinates, or app_name + element_name to click a specific button/element.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -83,10 +83,10 @@ pub fn register(registry: &mut ServiceRegistry) {
 
     // 2. Type text into the focused field
     registry.register(
-        "ui_controller_type_text",
+        "ui_ui_controller_type_text",
         Tool::new(
-            "ui_controller_type_text",
-            "Type text into the currently focused input field. Optionally activate an application first.",
+            "ui_ui_controller_type_text",
+            "[UPDATE] Type text into the currently focused input field. Optionally activate an application first.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -107,10 +107,10 @@ pub fn register(registry: &mut ServiceRegistry) {
 
     // 3. Press key combination
     registry.register(
-        "ui_controller_press_key",
+        "ui_ui_controller_press_key",
         Tool::new(
-            "ui_controller_press_key",
-            "Press a key or key combination. Supports special keys (return, tab, escape, arrow keys, function keys) and modifier combinations (command, shift, option, control).",
+            "ui_ui_controller_press_key",
+            "[UPDATE] Press a key or key combination. Supports special keys (return, tab, escape, arrow keys, function keys) and modifier combinations (command, shift, option, control).",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -139,10 +139,10 @@ pub fn register(registry: &mut ServiceRegistry) {
 
     // 4. Scroll in an app
     registry.register(
-        "ui_controller_scroll",
+        "ui_ui_controller_scroll",
         Tool::new(
-            "ui_controller_scroll",
-            "Scroll within the frontmost application or at specific coordinates.",
+            "ui_ui_controller_scroll",
+            "[UPDATE] Scroll within the frontmost application or at specific coordinates.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -168,10 +168,10 @@ pub fn register(registry: &mut ServiceRegistry) {
 
     // 5. Drag from one point to another
     registry.register(
-        "ui_controller_drag",
+        "ui_ui_controller_drag",
         Tool::new(
-            "ui_controller_drag",
-            "Drag from one screen coordinate to another. Useful for moving items, resizing, or selecting regions.",
+            "ui_ui_controller_drag",
+            "[UPDATE] Drag from one screen coordinate to another. Useful for moving items, resizing, or selecting regions.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -200,10 +200,10 @@ pub fn register(registry: &mut ServiceRegistry) {
 
     // 6. Select a menu item
     registry.register(
-        "ui_controller_select_menu",
+        "ui_ui_controller_select_menu",
         Tool::new(
-            "ui_controller_select_menu",
-            "Select a menu item from an application's menu bar. Navigate nested menus by providing the full menu path.",
+            "ui_ui_controller_select_menu",
+            "[UPDATE] Select a menu item from an application's menu bar. Navigate nested menus by providing the full menu path.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -225,10 +225,10 @@ pub fn register(registry: &mut ServiceRegistry) {
 
     // 7. Manage windows
     registry.register(
-        "ui_controller_manage_window",
+        "ui_ui_controller_manage_window",
         Tool::new(
-            "ui_controller_manage_window",
-            "Perform window management operations: list, close, minimize, fullscreen, focus, move, or resize windows of an application.",
+            "ui_ui_controller_manage_window",
+            "[UPDATE] Perform window management operations: list, close, minimize, fullscreen, focus, move, or resize windows of an application.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -266,10 +266,10 @@ pub fn register(registry: &mut ServiceRegistry) {
 
     // 8. Manage applications (open/close)
     registry.register(
-        "ui_controller_manage_app",
+        "ui_ui_controller_manage_app",
         Tool::new(
-            "ui_controller_manage_app",
-            "Open, close, or force-quit a macOS application.",
+            "ui_ui_controller_manage_app",
+            "[UPDATE] Open, close, or force-quit a macOS application.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -295,10 +295,10 @@ pub fn register(registry: &mut ServiceRegistry) {
 
     // 9. Interact with file dialogs
     registry.register(
-        "ui_controller_file_dialog",
+        "ui_ui_controller_file_dialog",
         Tool::new(
-            "ui_controller_file_dialog",
-            "Interact with open/save file dialogs. Navigate to a path, set a filename, confirm, or cancel the dialog.",
+            "ui_ui_controller_file_dialog",
+            "[UPDATE] Interact with open/save file dialogs. Navigate to a path, set a filename, confirm, or cancel the dialog.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -324,10 +324,10 @@ pub fn register(registry: &mut ServiceRegistry) {
 
     // 10. Control Dock items
     registry.register(
-        "ui_controller_dock",
+        "ui_ui_controller_dock",
         Tool::new(
-            "ui_controller_dock",
-            "Click an application icon in the macOS Dock.",
+            "ui_ui_controller_dock",
+            "[UPDATE] Click an application icon in the macOS Dock.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -1105,16 +1105,16 @@ mod tests {
         assert_eq!(tools.len(), 10, "Expected exactly 10 ui_controller tools");
 
         let names: Vec<_> = tools.iter().map(|t| t.name.as_ref()).collect();
-        assert!(names.contains(&"ui_controller_click"));
-        assert!(names.contains(&"ui_controller_type_text"));
-        assert!(names.contains(&"ui_controller_press_key"));
-        assert!(names.contains(&"ui_controller_scroll"));
-        assert!(names.contains(&"ui_controller_drag"));
-        assert!(names.contains(&"ui_controller_select_menu"));
-        assert!(names.contains(&"ui_controller_manage_window"));
-        assert!(names.contains(&"ui_controller_manage_app"));
-        assert!(names.contains(&"ui_controller_file_dialog"));
-        assert!(names.contains(&"ui_controller_dock"));
+        assert!(names.contains(&"ui_ui_controller_click"));
+        assert!(names.contains(&"ui_ui_controller_type_text"));
+        assert!(names.contains(&"ui_ui_controller_press_key"));
+        assert!(names.contains(&"ui_ui_controller_scroll"));
+        assert!(names.contains(&"ui_ui_controller_drag"));
+        assert!(names.contains(&"ui_ui_controller_select_menu"));
+        assert!(names.contains(&"ui_ui_controller_manage_window"));
+        assert!(names.contains(&"ui_ui_controller_manage_app"));
+        assert!(names.contains(&"ui_ui_controller_file_dialog"));
+        assert!(names.contains(&"ui_ui_controller_dock"));
     }
 
     #[test]

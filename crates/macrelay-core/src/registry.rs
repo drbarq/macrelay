@@ -45,9 +45,11 @@ impl ServiceRegistry {
         self.tools.insert(name, RegisteredTool { tool, handler });
     }
 
-    /// Get all registered tool schemas for ListTools.
+    /// Get all registered tool schemas for ListTools, sorted alphabetically.
     pub fn list_tools(&self) -> Vec<Tool> {
-        self.tools.values().map(|rt| rt.tool.clone()).collect()
+        let mut tools: Vec<Tool> = self.tools.values().map(|rt| rt.tool.clone()).collect();
+        tools.sort_by(|a, b| a.name.cmp(&b.name));
+        tools
     }
 
     /// Call a tool by name with the given arguments.

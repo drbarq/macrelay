@@ -9,10 +9,10 @@ use crate::registry::{ServiceRegistry, ToolHandler, error_result, schema_from_js
 /// Register all messages tools with the service registry.
 pub fn register(registry: &mut ServiceRegistry) {
     registry.register(
-        "messages_search_chats",
+        "communication_messages_search_chats",
         Tool::new(
-            "messages_search_chats",
-            "Search iMessage/SMS conversations by participant name, phone number, or email address. Returns matching chats with their identifiers and participants.",
+            "communication_messages_search_chats",
+            "[READ] Search iMessage/SMS conversations by participant name, phone number, or email address. Returns matching chats with their identifiers and participants.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -32,10 +32,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "messages_get_chat",
+        "communication_messages_get_chat",
         Tool::new(
-            "messages_get_chat",
-            "Get messages from a specific chat by chat ID. Returns message text, sender, timestamps, and attachment info.",
+            "communication_messages_get_chat",
+            "[READ] Get messages from a specific chat by chat ID. Returns message text, sender, timestamps, and attachment info.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -59,10 +59,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "messages_search_messages",
+        "communication_messages_search_messages",
         Tool::new(
-            "messages_search_messages",
-            "Search message text across all chats. Returns matching messages with their chat context, sender, and timestamps.",
+            "communication_messages_search_messages",
+            "[READ] Search message text across all chats. Returns matching messages with their chat context, sender, and timestamps.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -82,10 +82,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "messages_send_message",
+        "communication_messages_send_message",
         Tool::new(
-            "messages_send_message",
-            "Send an iMessage to a recipient. The recipient can be a phone number or email address.",
+            "communication_messages_send_message",
+            "[CREATE] Send an iMessage to a recipient. The recipient can be a phone number or email address.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -417,10 +417,10 @@ mod tests {
         assert_eq!(tools.len(), 4, "Expected exactly 4 messages tools");
 
         let names: Vec<_> = tools.iter().map(|t| t.name.as_ref()).collect();
-        assert!(names.contains(&"messages_search_chats"));
-        assert!(names.contains(&"messages_get_chat"));
-        assert!(names.contains(&"messages_search_messages"));
-        assert!(names.contains(&"messages_send_message"));
+        assert!(names.contains(&"communication_messages_search_chats"));
+        assert!(names.contains(&"communication_messages_get_chat"));
+        assert!(names.contains(&"communication_messages_search_messages"));
+        assert!(names.contains(&"communication_messages_send_message"));
     }
 
     #[test]

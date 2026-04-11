@@ -9,10 +9,10 @@ use crate::registry::{ServiceRegistry, ToolHandler, error_result, schema_from_js
 /// Register all UI viewer tools with the service registry.
 pub fn register(registry: &mut ServiceRegistry) {
     registry.register(
-        "ui_viewer_list_apps",
+        "ui_ui_viewer_list_apps",
         Tool::new(
-            "ui_viewer_list_apps",
-            "List all running (foreground) applications on this Mac, returning name, PID, and bundle identifier for each.",
+            "ui_ui_viewer_list_apps",
+            "[SYSTEM] List all running (foreground) applications on this Mac, returning name, PID, and bundle identifier for each.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {},
@@ -22,10 +22,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "ui_viewer_get_frontmost",
+        "ui_ui_viewer_get_frontmost",
         Tool::new(
-            "ui_viewer_get_frontmost",
-            "Get the frontmost (active) application and its current window title.",
+            "ui_ui_viewer_get_frontmost",
+            "[SYSTEM] Get the frontmost (active) application and its current window title.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {},
@@ -35,10 +35,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "ui_viewer_get_ui_tree",
+        "ui_ui_viewer_get_ui_tree",
         Tool::new(
-            "ui_viewer_get_ui_tree",
-            "Get the accessibility UI element tree of a running application. Returns an indented hierarchy showing role, title, and value of each UI element.",
+            "ui_ui_viewer_get_ui_tree",
+            "[READ] Get the accessibility UI element tree of a running application. Returns an indented hierarchy showing role, title, and value of each UI element.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -58,10 +58,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "ui_viewer_get_visible_text",
+        "ui_ui_viewer_get_visible_text",
         Tool::new(
-            "ui_viewer_get_visible_text",
-            "Extract all visible text (static text elements) from the windows of a running application.",
+            "ui_ui_viewer_get_visible_text",
+            "[READ] Extract all visible text (static text elements) from the windows of a running application.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -77,10 +77,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "ui_viewer_find_elements",
+        "ui_ui_viewer_find_elements",
         Tool::new(
-            "ui_viewer_find_elements",
-            "Find UI elements in an application's frontmost window matching an optional role and/or title filter.",
+            "ui_ui_viewer_find_elements",
+            "[READ] Find UI elements in an application's frontmost window matching an optional role and/or title filter.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -104,10 +104,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "ui_viewer_capture_snapshot",
+        "ui_ui_viewer_capture_snapshot",
         Tool::new(
-            "ui_viewer_capture_snapshot",
-            "Take a screenshot of a specific application window or the full screen. Returns the file path of the saved PNG image.",
+            "ui_ui_viewer_capture_snapshot",
+            "[SYSTEM] Take a screenshot of a specific application window or the full screen. Returns the file path of the saved PNG image.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -534,12 +534,12 @@ mod tests {
         assert_eq!(tools.len(), 6, "Expected exactly 6 ui_viewer tools");
 
         let names: Vec<_> = tools.iter().map(|t| t.name.as_ref()).collect();
-        assert!(names.contains(&"ui_viewer_list_apps"));
-        assert!(names.contains(&"ui_viewer_get_frontmost"));
-        assert!(names.contains(&"ui_viewer_get_ui_tree"));
-        assert!(names.contains(&"ui_viewer_get_visible_text"));
-        assert!(names.contains(&"ui_viewer_find_elements"));
-        assert!(names.contains(&"ui_viewer_capture_snapshot"));
+        assert!(names.contains(&"ui_ui_viewer_list_apps"));
+        assert!(names.contains(&"ui_ui_viewer_get_frontmost"));
+        assert!(names.contains(&"ui_ui_viewer_get_ui_tree"));
+        assert!(names.contains(&"ui_ui_viewer_get_visible_text"));
+        assert!(names.contains(&"ui_ui_viewer_find_elements"));
+        assert!(names.contains(&"ui_ui_viewer_capture_snapshot"));
     }
 
     struct AssertingMock {

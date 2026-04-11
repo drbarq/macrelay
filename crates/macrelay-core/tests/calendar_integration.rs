@@ -41,7 +41,7 @@ fn far_future_slot() -> (String, String) {
 #[ignore]
 async fn list_calendars_returns_at_least_one() {
     let r = reg();
-    let result = call_ok(&r, "calendar_list_calendars", json!({})).await;
+    let result = call_ok(&r, "pim_calendar_list_calendars", json!({})).await;
     let text = result_text(&result);
     assert!(
         !text.trim().is_empty(),
@@ -58,7 +58,7 @@ async fn search_events_does_not_leak_applescript_crash() {
     let r = reg();
     let result = call(
         &r,
-        "calendar_search_events",
+        "pim_calendar_search_events",
         json!({ "query": "macrelay-cal-smoke-zzzz-nonexistent-xyzzy" }),
     )
     .await;
@@ -78,7 +78,7 @@ async fn create_search_cancel_round_trip() {
 
     let created = call_ok(
         &r,
-        "calendar_create_event",
+        "pim_calendar_create_event",
         json!({
             "title": &title,
             "start_date": &start,
@@ -95,7 +95,7 @@ async fn create_search_cancel_round_trip() {
 
     let search = call_ok(
         &r,
-        "calendar_search_events",
+        "pim_calendar_search_events",
         json!({
             "query": &title,
             "start_date": &start,
@@ -109,7 +109,7 @@ async fn create_search_cancel_round_trip() {
         result_text(&search)
     );
 
-    best_effort(&r, "calendar_cancel_event", json!({ "title": &title })).await;
+    best_effort(&r, "pim_calendar_cancel_event", json!({ "title": &title })).await;
 }
 
 #[tokio::test]
@@ -121,7 +121,7 @@ async fn create_reschedule_cancel_round_trip() {
 
     call_ok(
         &r,
-        "calendar_create_event",
+        "pim_calendar_create_event",
         json!({
             "title": &title,
             "start_date": &start,
@@ -136,7 +136,7 @@ async fn create_reschedule_cancel_round_trip() {
 
     let rescheduled = call_ok(
         &r,
-        "calendar_reschedule_event",
+        "pim_calendar_reschedule_event",
         json!({
             "title": &title,
             "new_start_date": new_start.to_string(),
@@ -150,7 +150,7 @@ async fn create_reschedule_cancel_round_trip() {
         "reschedule should acknowledge the event: {text}"
     );
 
-    best_effort(&r, "calendar_cancel_event", json!({ "title": &title })).await;
+    best_effort(&r, "pim_calendar_cancel_event", json!({ "title": &title })).await;
 }
 
 #[tokio::test]
@@ -162,7 +162,7 @@ async fn create_update_cancel_round_trip() {
 
     call_ok(
         &r,
-        "calendar_create_event",
+        "pim_calendar_create_event",
         json!({
             "title": &title,
             "start_date": &start,
@@ -174,7 +174,7 @@ async fn create_update_cancel_round_trip() {
 
     let updated = call_ok(
         &r,
-        "calendar_update_event",
+        "pim_calendar_update_event",
         json!({
             "title": &title,
             "notes": "updated notes via integration test"
@@ -187,5 +187,5 @@ async fn create_update_cancel_round_trip() {
         "update should acknowledge the event: {text}"
     );
 
-    best_effort(&r, "calendar_cancel_event", json!({ "title": &title })).await;
+    best_effort(&r, "pim_calendar_cancel_event", json!({ "title": &title })).await;
 }

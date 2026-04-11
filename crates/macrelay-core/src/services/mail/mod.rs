@@ -9,10 +9,10 @@ use crate::registry::{ServiceRegistry, ToolHandler, error_result, schema_from_js
 /// Register all mail tools with the service registry.
 pub fn register(registry: &mut ServiceRegistry) {
     registry.register(
-        "mail_list_accounts",
+        "communication_mail_list_accounts",
         Tool::new(
-            "mail_list_accounts",
-            "List all mail accounts configured in Mail.app.",
+            "communication_mail_list_accounts",
+            "[READ] List all mail accounts configured in Mail.app.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {},
@@ -22,10 +22,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "mail_list_mailboxes",
+        "communication_mail_list_mailboxes",
         Tool::new(
-            "mail_list_mailboxes",
-            "List mailboxes (Inbox, Sent, Drafts, etc.) for a given mail account.",
+            "communication_mail_list_mailboxes",
+            "[READ] List mailboxes (Inbox, Sent, Drafts, etc.) for a given mail account.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -41,10 +41,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "mail_search_messages",
+        "communication_mail_search_messages",
         Tool::new(
-            "mail_search_messages",
-            "Search mail messages by query, sender, subject, or date range. Returns matching messages with subject, sender, date, and read status.",
+            "communication_mail_search_messages",
+            "[READ] Search mail messages by query, sender, subject, or date range. Returns matching messages with subject, sender, date, and read status.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -91,10 +91,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "mail_get_messages",
+        "communication_mail_get_messages",
         Tool::new(
-            "mail_get_messages",
-            "Get detailed message content by matching subject. Returns subject, sender, recipients, date, read status, and body content.",
+            "communication_mail_get_messages",
+            "[READ] Get detailed message content by matching subject. Returns subject, sender, recipients, date, read status, and body content.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -122,10 +122,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "mail_get_thread",
+        "communication_mail_get_thread",
         Tool::new(
-            "mail_get_thread",
-            "Get all messages in a thread/conversation by matching the subject line. Returns all related messages sorted by date.",
+            "communication_mail_get_thread",
+            "[READ] Get all messages in a thread/conversation by matching the subject line. Returns all related messages sorted by date.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -149,10 +149,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "mail_compose_message",
+        "communication_mail_compose_message",
         Tool::new(
-            "mail_compose_message",
-            "Create and display a new outgoing email message in Mail.app.",
+            "communication_mail_compose_message",
+            "[CREATE] Create and display a new outgoing email message in Mail.app.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -188,10 +188,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "mail_reply_message",
+        "communication_mail_reply_message",
         Tool::new(
-            "mail_reply_message",
-            "Reply to an existing email message found by subject match. Opens a reply window in Mail.app.",
+            "communication_mail_reply_message",
+            "[CREATE] Reply to an existing email message found by subject match. Opens a reply window in Mail.app.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -223,10 +223,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "mail_forward_message",
+        "communication_mail_forward_message",
         Tool::new(
-            "mail_forward_message",
-            "Forward an existing email message found by subject match. Opens a forward window in Mail.app.",
+            "communication_mail_forward_message",
+            "[CREATE] Forward an existing email message found by subject match. Opens a forward window in Mail.app.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -258,10 +258,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "mail_update_read_state",
+        "communication_mail_update_read_state",
         Tool::new(
-            "mail_update_read_state",
-            "Mark messages as read or unread by subject match.",
+            "communication_mail_update_read_state",
+            "[UPDATE] Mark messages as read or unread by subject match.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -289,10 +289,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "mail_move_message",
+        "communication_mail_move_message",
         Tool::new(
-            "mail_move_message",
-            "Move a message to a different mailbox by subject match.",
+            "communication_mail_move_message",
+            "[UPDATE] Move a message to a different mailbox by subject match.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -324,10 +324,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "mail_delete_message",
+        "communication_mail_delete_message",
         Tool::new(
-            "mail_delete_message",
-            "Delete a message by moving it to Trash. Finds message by subject match.",
+            "communication_mail_delete_message",
+            "[DELETE] Delete a message by moving it to Trash. Finds message by subject match.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -351,10 +351,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "mail_open_message",
+        "communication_mail_open_message",
         Tool::new(
-            "mail_open_message",
-            "Open a specific message in Mail.app by subject match.",
+            "communication_mail_open_message",
+            "[READ] Open a specific message in Mail.app by subject match.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -378,10 +378,10 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
-        "mail_get_attachment",
+        "communication_mail_get_attachment",
         Tool::new(
-            "mail_get_attachment",
-            "List attachments of a message found by subject match. Returns attachment names and MIME types.",
+            "communication_mail_get_attachment",
+            "[READ] List attachments of a message found by subject match. Returns attachment names and MIME types.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -474,7 +474,7 @@ fn handler_list_mailboxes() -> ToolHandler {
                     try
                         set acct to account "{escaped_account}"
                     on error
-                        return "ERROR:Account not found: {escaped_account}. Use mail_list_accounts to see available accounts."
+                        return "ERROR:Account not found: {escaped_account}. Use communication_mail_list_accounts to see available accounts."
                     end try
                     set output to ""
                     set mboxes to every mailbox of acct
@@ -1517,19 +1517,19 @@ mod tests {
         assert_eq!(tools.len(), 13, "Expected exactly 13 mail tools");
 
         let names: Vec<_> = tools.iter().map(|t| t.name.as_ref()).collect();
-        assert!(names.contains(&"mail_list_accounts"));
-        assert!(names.contains(&"mail_list_mailboxes"));
-        assert!(names.contains(&"mail_search_messages"));
-        assert!(names.contains(&"mail_get_messages"));
-        assert!(names.contains(&"mail_get_thread"));
-        assert!(names.contains(&"mail_compose_message"));
-        assert!(names.contains(&"mail_reply_message"));
-        assert!(names.contains(&"mail_forward_message"));
-        assert!(names.contains(&"mail_update_read_state"));
-        assert!(names.contains(&"mail_move_message"));
-        assert!(names.contains(&"mail_delete_message"));
-        assert!(names.contains(&"mail_open_message"));
-        assert!(names.contains(&"mail_get_attachment"));
+        assert!(names.contains(&"communication_mail_list_accounts"));
+        assert!(names.contains(&"communication_mail_list_mailboxes"));
+        assert!(names.contains(&"communication_mail_search_messages"));
+        assert!(names.contains(&"communication_mail_get_messages"));
+        assert!(names.contains(&"communication_mail_get_thread"));
+        assert!(names.contains(&"communication_mail_compose_message"));
+        assert!(names.contains(&"communication_mail_reply_message"));
+        assert!(names.contains(&"communication_mail_forward_message"));
+        assert!(names.contains(&"communication_mail_update_read_state"));
+        assert!(names.contains(&"communication_mail_move_message"));
+        assert!(names.contains(&"communication_mail_delete_message"));
+        assert!(names.contains(&"communication_mail_open_message"));
+        assert!(names.contains(&"communication_mail_get_attachment"));
     }
 
     #[tokio::test]
