@@ -8,8 +8,8 @@ use rmcp::model::{
     ServerInfo,
 };
 use rmcp::service::RequestContext;
-use rmcp::transport::io::stdio;
 use rmcp::service::ServiceExt;
+use rmcp::transport::io::stdio;
 use rmcp::{ErrorData as McpError, RoleServer};
 use serde_json::Value;
 use tracing_subscriber::EnvFilter;
@@ -34,38 +34,34 @@ impl ServerHandler for MacRelayServer {
         info
     }
 
-    fn list_tools(
+    async fn list_tools(
         &self,
         _request: Option<PaginatedRequestParams>,
         _cx: RequestContext<RoleServer>,
-    ) -> impl Future<Output = Result<ListToolsResult, McpError>> + Send + '_ {
-        async move {
-            let tools = self.registry.list_tools();
-            Ok(ListToolsResult {
-                tools,
-                ..Default::default()
-            })
-        }
+    ) -> Result<ListToolsResult, McpError> {
+        let tools = self.registry.list_tools();
+        Ok(ListToolsResult {
+            tools,
+            ..Default::default()
+        })
     }
 
-    fn call_tool(
+    async fn call_tool(
         &self,
         request: CallToolRequestParams,
         _cx: RequestContext<RoleServer>,
-    ) -> impl Future<Output = Result<CallToolResult, McpError>> + Send + '_ {
-        async move {
-            let name = &request.name;
-            let arguments: HashMap<String, Value> = request
-                .arguments
-                .map(|map| map.into_iter().collect())
-                .unwrap_or_default();
+    ) -> Result<CallToolResult, McpError> {
+        let name = &request.name;
+        let arguments: HashMap<String, Value> = request
+            .arguments
+            .map(|map| map.into_iter().collect())
+            .unwrap_or_default();
 
-            match self.registry.call_tool(name, arguments).await {
-                Ok(result) => Ok(result),
-                Err(e) => Ok(CallToolResult::error(vec![Content::text(format!(
-                    "Error: {e}"
-                ))])),
-            }
+        match self.registry.call_tool(name, arguments).await {
+            Ok(result) => Ok(result),
+            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!(
+                "Error: {e}"
+            ))])),
         }
     }
 }

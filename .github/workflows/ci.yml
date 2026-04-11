@@ -1,0 +1,66 @@
+name: Rust CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    name: Test and Lint
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+          
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check Formatting
+        run: cargo fmt -- --check
+
+      - name: Lint with Clippy
+        run: cargo clippy -- -D warnings
+
+      - name: Run Unit Tests
+        run: cargo test -p macrelay-core --lib
+
+      - name: Build (Debug)
+        run: cargo build
+
+  build-release:
+    name: Build Release Binaries
+    runs-on: macos-latest
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin, aarch64-apple-darwin
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build Universal Binary
+        run: |
+          cargo build --release --target x86_64-apple-darwin
+          cargo build --release --target aarch64-apple-darwin
+          mkdir -p bin
+          lipo -create \
+            target/x86_64-apple-darwin/release/macrelay \
+            target/aarch64-apple-darwin/release/macrelay \
+            -output bin/macrelay
+          
+      - name: Upload Binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: macrelay-universal
+          path: bin/macrelay
