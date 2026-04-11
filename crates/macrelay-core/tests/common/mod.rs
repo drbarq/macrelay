@@ -86,22 +86,14 @@ pub fn unique_tag(tag: &str) -> String {
 
 /// Call a tool by name, returning a CallToolResult. Panics on dispatch
 /// error (distinct from a tool-reported error).
-pub async fn call(
-    reg: &ServiceRegistry,
-    name: &str,
-    arguments: Value,
-) -> CallToolResult {
+pub async fn call(reg: &ServiceRegistry, name: &str, arguments: Value) -> CallToolResult {
     reg.call_tool(name, args(arguments))
         .await
         .unwrap_or_else(|e| panic!("call_tool({name}) dispatch error: {e}"))
 }
 
 /// Convenience: call a tool and assert the result is non-error.
-pub async fn call_ok(
-    reg: &ServiceRegistry,
-    name: &str,
-    arguments: Value,
-) -> CallToolResult {
+pub async fn call_ok(reg: &ServiceRegistry, name: &str, arguments: Value) -> CallToolResult {
     let r = call(reg, name, arguments).await;
     assert!(
         is_ok(&r),
@@ -112,11 +104,7 @@ pub async fn call_ok(
 }
 
 /// Convenience: call a tool and assert the result IS an error.
-pub async fn call_err(
-    reg: &ServiceRegistry,
-    name: &str,
-    arguments: Value,
-) -> CallToolResult {
+pub async fn call_err(reg: &ServiceRegistry, name: &str, arguments: Value) -> CallToolResult {
     let r = call(reg, name, arguments).await;
     assert!(
         is_err(&r),
@@ -128,11 +116,7 @@ pub async fn call_err(
 
 /// Best-effort cleanup helper — ignores errors. Useful in test teardown
 /// where the cleanup itself might fail (e.g. item already gone).
-pub async fn best_effort(
-    reg: &ServiceRegistry,
-    name: &str,
-    arguments: Value,
-) {
+pub async fn best_effort(reg: &ServiceRegistry, name: &str, arguments: Value) {
     let _ = reg.call_tool(name, args(arguments)).await;
 }
 

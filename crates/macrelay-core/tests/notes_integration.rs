@@ -116,7 +116,10 @@ async fn write_delete_restore_round_trip_end_to_end() {
 
     let restored = call_ok(&r, "notes_restore_note", json!({ "name": &title })).await;
     let text = result_text(&restored);
-    assert!(text.contains(&title), "restore result should name the note: {text}");
+    assert!(
+        text.contains(&title),
+        "restore result should name the note: {text}"
+    );
     assert!(
         text.contains("account:"),
         "restore result should include account attribution: {text}"

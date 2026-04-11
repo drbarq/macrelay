@@ -58,7 +58,6 @@ fn cases() -> Vec<ToolCase> {
             expect: Success,
             note: "pure status check, no permissions required",
         },
-
         // ---------------- location ----------------
         ToolCase {
             name: "location_get_current",
@@ -66,7 +65,6 @@ fn cases() -> Vec<ToolCase> {
             expect: Tolerate,
             note: "requires Location Services permission",
         },
-
         // ---------------- contacts ----------------
         ToolCase {
             name: "contacts_get_all",
@@ -80,7 +78,6 @@ fn cases() -> Vec<ToolCase> {
             expect: Tolerate,
             note: "requires Contacts permission",
         },
-
         // ---------------- notes (read-only surfaces) ----------------
         ToolCase {
             name: "notes_list_accounts",
@@ -130,7 +127,6 @@ fn cases() -> Vec<ToolCase> {
             expect: Skip,
             note: "opens Notes.app - visible side effect",
         },
-
         // ---------------- mail ----------------
         ToolCase {
             name: "mail_list_accounts",
@@ -210,7 +206,6 @@ fn cases() -> Vec<ToolCase> {
             expect: Skip,
             note: "filesystem side effect",
         },
-
         // ---------------- calendar ----------------
         ToolCase {
             name: "calendar_list_calendars",
@@ -226,10 +221,12 @@ fn cases() -> Vec<ToolCase> {
         },
         ToolCase {
             name: "calendar_find_available_times",
-            args: || json!({
-                "start_date": "1900000000",
-                "end_date": "1900003600"
-            }),
+            args: || {
+                json!({
+                    "start_date": "1900000000",
+                    "end_date": "1900003600"
+                })
+            },
             expect: Tolerate,
             note: "read-only, far-future range",
         },
@@ -263,7 +260,6 @@ fn cases() -> Vec<ToolCase> {
             expect: Skip,
             note: "opens Calendar.app",
         },
-
         // ---------------- reminders ----------------
         ToolCase {
             name: "reminders_list_lists",
@@ -307,7 +303,6 @@ fn cases() -> Vec<ToolCase> {
             expect: Skip,
             note: "opens Reminders.app",
         },
-
         // ---------------- messages ----------------
         ToolCase {
             name: "messages_search_chats",
@@ -333,7 +328,6 @@ fn cases() -> Vec<ToolCase> {
             expect: Skip,
             note: "sends real iMessage - cannot safely automate",
         },
-
         // ---------------- stickies ----------------
         ToolCase {
             name: "stickies_list",
@@ -359,7 +353,6 @@ fn cases() -> Vec<ToolCase> {
             expect: Skip,
             note: "opens Stickies.app",
         },
-
         // ---------------- shortcuts ----------------
         ToolCase {
             name: "shortcuts_list",
@@ -379,7 +372,6 @@ fn cases() -> Vec<ToolCase> {
             expect: Skip,
             note: "runs user shortcut - arbitrary side effects",
         },
-
         // ---------------- maps ----------------
         // All maps tools open Maps.app via URL scheme. Skip from smoke;
         // manual verification is appropriate.
@@ -407,7 +399,6 @@ fn cases() -> Vec<ToolCase> {
             expect: Skip,
             note: "opens Maps.app",
         },
-
         // ---------------- ui_viewer ----------------
         ToolCase {
             name: "ui_viewer_list_apps",
@@ -445,7 +436,6 @@ fn cases() -> Vec<ToolCase> {
             expect: Tolerate,
             note: "Finder is always running",
         },
-
         // ---------------- ui_controller ----------------
         // All ui_controller tools drive mouse/keyboard/windows. Smoke-testing
         // them safely is hard (need a target app with known state). All Skip.
