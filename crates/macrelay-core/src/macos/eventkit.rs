@@ -74,10 +74,10 @@ pub async fn search_events_applescript(
         let parts: Vec<&str> = line.split("||").collect();
         let title = parts.first().unwrap_or(&"").to_string();
 
-        if let Some(q) = query {
-            if !title.to_lowercase().contains(&q.to_lowercase()) {
-                continue;
-            }
+        if let Some(q) = query
+            && !title.to_lowercase().contains(&q.to_lowercase())
+        {
+            continue;
         }
 
         events.push(EventInfo {
@@ -85,7 +85,10 @@ pub async fn search_events_applescript(
             start_date: parts.get(1).unwrap_or(&"").to_string(),
             end_date: parts.get(2).unwrap_or(&"").to_string(),
             is_all_day: parts.get(5).map(|s| *s == "true").unwrap_or(false),
-            location: parts.get(3).map(|s| s.to_string()).filter(|s| !s.is_empty()),
+            location: parts
+                .get(3)
+                .map(|s| s.to_string())
+                .filter(|s| !s.is_empty()),
             notes: None,
             calendar: parts.get(4).unwrap_or(&"").to_string(),
         });

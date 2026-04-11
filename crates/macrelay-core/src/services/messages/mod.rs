@@ -3,7 +3,8 @@ use std::sync::Arc;
 use rmcp::model::Tool;
 use serde_json::json;
 
-use crate::registry::{error_result, schema_from_json, text_result, ServiceRegistry, ToolHandler};
+use crate::macos::escape::escape_applescript_string;
+use crate::registry::{ServiceRegistry, ToolHandler, error_result, schema_from_json, text_result};
 
 /// Register all messages tools with the service registry.
 pub fn register(registry: &mut ServiceRegistry) {
@@ -109,15 +110,12 @@ pub fn register(registry: &mut ServiceRegistry) {
 fn open_chat_db() -> Result<rusqlite::Connection, String> {
     let home = std::env::var("HOME").unwrap_or_default();
     let db_path = format!("{home}/Library/Messages/chat.db");
-    rusqlite::Connection::open_with_flags(
-        &db_path,
-        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-    )
-    .map_err(|_| {
-        crate::permissions::PermissionManager::permission_error(
-            crate::permissions::PermissionType::FullDiskAccess,
-        )
-    })
+    rusqlite::Connection::open_with_flags(&db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(|_| {
+            crate::permissions::PermissionManager::permission_error(
+                crate::permissions::PermissionType::FullDiskAccess,
+            )
+        })
 }
 
 /// Convert an Apple CoreData timestamp (nanoseconds since 2001-01-01) to a
@@ -137,9 +135,7 @@ fn apple_timestamp_to_string(nanos: i64) -> String {
     // Simple date calculation from Unix days
     // Epoch: 1970-01-01
     let (year, month, day) = unix_days_to_date(days);
-    format!(
-        "{year:04}-{month:02}-{day:02} {hours:02}:{minutes:02}:{seconds:02} UTC"
-    )
+    format!("{year:04}-{month:02}-{day:02} {hours:02}:{minutes:02}:{seconds:02} UTC")
 }
 
 /// Convert days since Unix epoch to (year, month, day).
@@ -148,8 +144,7 @@ fn unix_days_to_date(days: i64) -> (i64, i64, i64) {
     let z = days + 719468;
     let era = if z >= 0 { z } else { z - 146096 } / 146097;
     let doe = z - era * 146097; // day of era [0, 146096]
-    let yoe =
-        (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365; // year of era [0, 399]
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365; // year of era [0, 399]
     let y = yoe + era * 400;
     let doy = doe - (365 * yoe + yoe / 4 - yoe / 100); // day of year [0, 365]
     let mp = (5 * doy + 2) / 153; // [0, 11]
@@ -162,15 +157,12 @@ fn unix_days_to_date(days: i64) -> (i64, i64, i64) {
 fn handler_search_chats() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
-            let query = args
-                .get("query")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("query is required"))?;
+            let query = match args.get("query").and_then(|v| v.as_str()) {
+                Some(q) => q,
+                None => return Ok(error_result("query is required")),
+            };
 
-            let limit = args
-                .get("limit")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(20) as usize;
+            let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(20) as usize;
 
             let conn = match open_chat_db() {
                 Ok(c) => c,
@@ -214,16 +206,12 @@ fn handler_search_chats() -> ToolHandler {
                 .map_err(|e| anyhow::anyhow!("{e}"))?;
 
             let mut results = Vec::new();
-            for row in rows {
-                if let Ok(val) = row {
-                    results.push(val);
-                }
+            for val in rows.flatten() {
+                results.push(val);
             }
 
             if results.is_empty() {
-                Ok(text_result(format!(
-                    "No chats found matching: {query}"
-                )))
+                Ok(text_result(format!("No chats found matching: {query}")))
             } else {
                 let json = serde_json::to_string_pretty(&results)?;
                 Ok(text_result(format!(
@@ -238,20 +226,14 @@ fn handler_search_chats() -> ToolHandler {
 fn handler_get_chat() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
-            let chat_id = args
-                .get("chat_id")
-                .and_then(|v| v.as_i64())
-                .ok_or_else(|| anyhow::anyhow!("chat_id is required"))?;
+            let chat_id = match args.get("chat_id").and_then(|v| v.as_i64()) {
+                Some(id) => id,
+                None => return Ok(error_result("chat_id is required")),
+            };
 
-            let limit = args
-                .get("limit")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(50) as i64;
+            let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(50) as i64;
 
-            let offset = args
-                .get("offset")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0) as i64;
+            let offset = args.get("offset").and_then(|v| v.as_u64()).unwrap_or(0) as i64;
 
             let conn = match open_chat_db() {
                 Ok(c) => c,
@@ -294,10 +276,8 @@ fn handler_get_chat() -> ToolHandler {
                 .map_err(|e| anyhow::anyhow!("{e}"))?;
 
             let mut results = Vec::new();
-            for row in rows {
-                if let Ok(val) = row {
-                    results.push(val);
-                }
+            for val in rows.flatten() {
+                results.push(val);
             }
 
             if results.is_empty() {
@@ -318,15 +298,12 @@ fn handler_get_chat() -> ToolHandler {
 fn handler_search_messages() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
-            let query = args
-                .get("query")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("query is required"))?;
+            let query = match args.get("query").and_then(|v| v.as_str()) {
+                Some(q) => q,
+                None => return Ok(error_result("query is required")),
+            };
 
-            let limit = args
-                .get("limit")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(50) as i64;
+            let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(50) as i64;
 
             let conn = match open_chat_db() {
                 Ok(c) => c,
@@ -376,16 +353,12 @@ fn handler_search_messages() -> ToolHandler {
                 .map_err(|e| anyhow::anyhow!("{e}"))?;
 
             let mut results = Vec::new();
-            for row in rows {
-                if let Ok(val) = row {
-                    results.push(val);
-                }
+            for val in rows.flatten() {
+                results.push(val);
             }
 
             if results.is_empty() {
-                Ok(text_result(format!(
-                    "No messages found matching: {query}"
-                )))
+                Ok(text_result(format!("No messages found matching: {query}")))
             } else {
                 let json = serde_json::to_string_pretty(&results)?;
                 Ok(text_result(format!(
@@ -400,19 +373,19 @@ fn handler_search_messages() -> ToolHandler {
 fn handler_send_message() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
-            let recipient = args
-                .get("recipient")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("recipient is required"))?;
+            let recipient = match args.get("recipient").and_then(|v| v.as_str()) {
+                Some(r) => r,
+                None => return Ok(error_result("recipient is required")),
+            };
 
-            let message = args
-                .get("message")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("message is required"))?;
+            let message = match args.get("message").and_then(|v| v.as_str()) {
+                Some(m) => m,
+                None => return Ok(error_result("message is required")),
+            };
 
             // Escape special characters for AppleScript strings
-            let escaped_recipient = recipient.replace('\\', "\\\\").replace('"', "\\\"");
-            let escaped_message = message.replace('\\', "\\\\").replace('"', "\\\"");
+            let escaped_recipient = escape_applescript_string(recipient);
+            let escaped_message = escape_applescript_string(message);
 
             let script = format!(
                 r#"tell application "Messages"
@@ -434,6 +407,7 @@ return "Message sent to {escaped_recipient}""#
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
 
     #[test]
     fn test_tool_schemas_valid() {
@@ -465,5 +439,220 @@ mod tests {
         assert_eq!(unix_days_to_date(0), (1970, 1, 1));
         // 2000-01-01 is day 10957
         assert_eq!(unix_days_to_date(10957), (2000, 1, 1));
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn test_search_chats_tool() {
+        let handler = handler_search_chats();
+        let mut args = HashMap::new();
+        args.insert("query".to_string(), json!("John Doe"));
+
+        let result = handler(args).await.unwrap();
+        // Since database availability isn't guaranteed in CI, we just verify it doesn't panic
+        let _is_err = result.is_error.unwrap_or(false);
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn test_get_chat_tool() {
+        let handler = handler_get_chat();
+        let mut args = HashMap::new();
+        args.insert("chat_id".to_string(), json!(1));
+
+        let result = handler(args).await.unwrap();
+        let _is_err = result.is_error.unwrap_or(false);
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn test_search_messages_tool() {
+        let handler = handler_search_messages();
+        let mut args = HashMap::new();
+        args.insert("query".to_string(), json!("hello"));
+
+        let result = handler(args).await.unwrap();
+        let _is_err = result.is_error.unwrap_or(false);
+    }
+
+    #[tokio::test]
+    async fn test_send_message_tool() {
+        use crate::macos::applescript::{MOCK_RUNNER, ScriptRunner};
+        use std::sync::Arc;
+        use std::time::Duration;
+
+        struct MockAppleScript;
+        impl ScriptRunner for MockAppleScript {
+            fn run_applescript(&self, script: &str) -> anyhow::Result<String> {
+                assert!(script.contains("1st account whose service type = iMessage"));
+                assert!(script.contains("participant \"test@example.com\""));
+                assert!(script.contains("send \"hello world\""));
+                Ok("Message sent to test@example.com".to_string())
+            }
+            fn run_applescript_with_timeout(
+                &self,
+                _script: &str,
+                _timeout: Duration,
+            ) -> anyhow::Result<String> {
+                Ok("".to_string())
+            }
+            fn run_jxa(&self, _script: &str) -> anyhow::Result<String> {
+                Ok("".to_string())
+            }
+        }
+
+        let mock = Arc::new(MockAppleScript);
+        let handler = handler_send_message();
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let mut args = HashMap::new();
+                args.insert("recipient".to_string(), json!("test@example.com"));
+                args.insert("message".to_string(), json!("hello world"));
+
+                let result = handler(args).await.unwrap();
+
+                assert!(!result.is_error.unwrap_or(false));
+
+                let content_str = format!("{:?}", result.content);
+                assert!(
+                    content_str.contains("Message sent to test@example.com"),
+                    "Content didn't match: {}",
+                    content_str
+                );
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_send_message_escaping() {
+        use crate::macos::applescript::{MOCK_RUNNER, ScriptRunner};
+        use std::sync::Arc;
+        use std::time::Duration;
+
+        struct MockAppleScript;
+        impl ScriptRunner for MockAppleScript {
+            fn run_applescript(&self, script: &str) -> anyhow::Result<String> {
+                assert!(script.contains("participant \"test@example.com\""));
+                assert!(script.contains("send \"Hello \\\"World\\\" \\\\backslashed\""));
+                Ok("Message sent to test@example.com".to_string())
+            }
+            fn run_applescript_with_timeout(
+                &self,
+                _script: &str,
+                _timeout: Duration,
+            ) -> anyhow::Result<String> {
+                unimplemented!()
+            }
+            fn run_jxa(&self, _script: &str) -> anyhow::Result<String> {
+                unimplemented!()
+            }
+        }
+
+        let mock = Arc::new(MockAppleScript);
+        let handler = handler_send_message();
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let mut args = HashMap::new();
+                args.insert("recipient".to_string(), json!("test@example.com"));
+                args.insert(
+                    "message".to_string(),
+                    json!("Hello \"World\" \\backslashed"),
+                );
+
+                let result = handler(args).await.unwrap();
+                assert!(!result.is_error.unwrap_or(false));
+            })
+            .await;
+    }
+
+    /// When osascript fails, send_message must return a graceful error
+    /// result instead of panicking or propagating a raw anyhow error.
+    #[tokio::test]
+    async fn test_send_message_returns_error_result_on_osascript_failure() {
+        use crate::macos::applescript::{MOCK_RUNNER, ScriptRunner};
+        use std::sync::Arc;
+        use std::time::Duration;
+
+        struct ErrorMock;
+        impl ScriptRunner for ErrorMock {
+            fn run_applescript(&self, _script: &str) -> anyhow::Result<String> {
+                Err(anyhow::anyhow!(
+                    "osascript: Messages got an error: Not authorized to send Apple events"
+                ))
+            }
+            fn run_applescript_with_timeout(
+                &self,
+                _script: &str,
+                _timeout: Duration,
+            ) -> anyhow::Result<String> {
+                unimplemented!()
+            }
+            fn run_jxa(&self, _script: &str) -> anyhow::Result<String> {
+                unimplemented!()
+            }
+        }
+
+        let mock = Arc::new(ErrorMock);
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_send_message();
+                let mut args = HashMap::new();
+                args.insert("recipient".to_string(), json!("test@example.com"));
+                args.insert("message".to_string(), json!("hello"));
+
+                let result = handler(args)
+                    .await
+                    .expect("Handler should not panic on osascript error");
+                assert_eq!(result.is_error, Some(true));
+
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert!(
+                    content.to_lowercase().contains("fail")
+                        || content.to_lowercase().contains("error"),
+                    "Expected a human-readable error, got: {}",
+                    content
+                );
+                assert!(
+                    content.contains("Not authorized"),
+                    "Expected underlying error to be surfaced, got: {}",
+                    content
+                );
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_validation_send_message_requires_recipient() {
+        let handler = handler_send_message();
+        let mut args = HashMap::new();
+        args.insert("message".to_string(), json!("hello"));
+
+        let result = handler(args).await.expect("Handler should not panic");
+        assert_eq!(result.is_error, Some(true));
+        assert!(
+            result.content[0]
+                .as_text()
+                .unwrap()
+                .text
+                .contains("recipient is required")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_validation_get_chat_requires_chat_id() {
+        let handler = handler_get_chat();
+        let args = HashMap::new();
+
+        let result = handler(args).await.expect("Handler should not panic");
+        assert_eq!(result.is_error, Some(true));
+        assert!(
+            result.content[0]
+                .as_text()
+                .unwrap()
+                .text
+                .contains("chat_id is required")
+        );
     }
 }

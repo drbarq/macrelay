@@ -8,7 +8,9 @@ use serde_json::Value;
 
 /// A handler function that processes a tool call and returns a result.
 pub type ToolHandler = Arc<
-    dyn Fn(HashMap<String, Value>) -> Pin<Box<dyn Future<Output = Result<CallToolResult, anyhow::Error>> + Send>>
+    dyn Fn(
+            HashMap<String, Value>,
+        ) -> Pin<Box<dyn Future<Output = Result<CallToolResult, anyhow::Error>> + Send>>
         + Send
         + Sync,
 >;
@@ -22,6 +24,12 @@ pub struct RegisteredTool {
 /// Registry holding all services and their tools.
 pub struct ServiceRegistry {
     tools: HashMap<String, RegisteredTool>,
+}
+
+impl Default for ServiceRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ServiceRegistry {

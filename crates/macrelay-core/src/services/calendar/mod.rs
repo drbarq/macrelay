@@ -3,8 +3,9 @@ use std::sync::Arc;
 use rmcp::model::Tool;
 use serde_json::json;
 
+use crate::macos::escape::escape_applescript_string;
 use crate::macos::eventkit;
-use crate::registry::{error_result, schema_from_json, text_result, ServiceRegistry, ToolHandler};
+use crate::registry::{ServiceRegistry, ToolHandler, error_result, schema_from_json, text_result};
 
 /// Register all calendar tools with the service registry.
 pub fn register(registry: &mut ServiceRegistry) {
@@ -236,14 +237,9 @@ fn handler_search_events() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
             let days_ahead = 7u32; // Default 7 days
-            let limit = args
-                .get("limit")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(50) as usize;
+            let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(50) as usize;
 
-            let query_filter = args
-                .get("query")
-                .and_then(|v| v.as_str());
+            let query_filter = args.get("query").and_then(|v| v.as_str());
 
             match eventkit::search_events_applescript(days_ahead, query_filter).await {
                 Ok(mut events) => {
@@ -252,7 +248,10 @@ fn handler_search_events() -> ToolHandler {
                         Ok(text_result("No events found in the specified date range."))
                     } else {
                         let json = serde_json::to_string_pretty(&events)?;
-                        Ok(text_result(format!("Found {} event(s):\n\n{json}", events.len())))
+                        Ok(text_result(format!(
+                            "Found {} event(s):\n\n{json}",
+                            events.len()
+                        )))
                     }
                 }
                 Err(e) => Ok(error_result(format!("Failed to search events: {e}"))),
@@ -264,20 +263,18 @@ fn handler_search_events() -> ToolHandler {
 fn handler_create_event() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
-            let title = args
-                .get("title")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("title is required"))?;
-
-            let start_str = args
-                .get("start_date")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("start_date is required"))?;
-
-            let end_str = args
-                .get("end_date")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("end_date is required"))?;
+            let title = match args.get("title").and_then(|v| v.as_str()) {
+                Some(t) => t,
+                None => return Ok(error_result("title is required")),
+            };
+            let start_str = match args.get("start_date").and_then(|v| v.as_str()) {
+                Some(s) => s,
+                None => return Ok(error_result("start_date is required")),
+            };
+            let end_str = match args.get("end_date").and_then(|v| v.as_str()) {
+                Some(e) => e,
+                None => return Ok(error_result("end_date is required")),
+            };
 
             let is_all_day = args
                 .get("is_all_day")
@@ -286,6 +283,10 @@ fn handler_create_event() -> ToolHandler {
 
             let location = args.get("location").and_then(|v| v.as_str()).unwrap_or("");
             let notes = args.get("notes").and_then(|v| v.as_str()).unwrap_or("");
+
+            let escaped_title = escape_applescript_string(title);
+            let escaped_location = escape_applescript_string(location);
+            let escaped_notes = escape_applescript_string(notes);
 
             // Build AppleScript for event creation
             // Dates come as Unix timestamps, convert to AppleScript date
@@ -304,10 +305,10 @@ fn handler_create_event() -> ToolHandler {
 
                 tell application "Calendar"
                     tell calendar 1
-                        set newEvent to make new event with properties {{summary:"{title}", start date:startDate, end date:endDate, location:"{location}", description:"{notes}", allday event:{allday_str}}}
+                        set newEvent to make new event with properties {{summary:"{escaped_title}", start date:startDate, end date:endDate, location:"{escaped_location}", description:"{escaped_notes}", allday event:{allday_str}}}
                     end tell
                 end tell
-                return "Event created: {title}"
+                return "Event created: {escaped_title}"
                 "#
             );
 
@@ -322,22 +323,22 @@ fn handler_create_event() -> ToolHandler {
 fn handler_reschedule_event() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
-            let title = args
-                .get("title")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("title is required"))?;
+            let title = match args.get("title").and_then(|v| v.as_str()) {
+                Some(t) => t,
+                None => return Ok(error_result("title is required")),
+            };
 
-            let new_start_str = args
-                .get("new_start_date")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("new_start_date is required"))?;
+            let new_start_str = match args.get("new_start_date").and_then(|v| v.as_str()) {
+                Some(s) => s,
+                None => return Ok(error_result("new_start_date is required")),
+            };
 
-            let new_end_str = args
-                .get("new_end_date")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("new_end_date is required"))?;
+            let new_end_str = match args.get("new_end_date").and_then(|v| v.as_str()) {
+                Some(e) => e,
+                None => return Ok(error_result("new_end_date is required")),
+            };
 
-            let escaped_title = title.replace('"', "\\\"");
+            let escaped_title = escape_applescript_string(title);
 
             let script = format!(
                 r#"
@@ -383,12 +384,12 @@ fn handler_reschedule_event() -> ToolHandler {
 fn handler_cancel_event() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
-            let title = args
-                .get("title")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("title is required"))?;
+            let title = match args.get("title").and_then(|v| v.as_str()) {
+                Some(t) => t,
+                None => return Ok(error_result("title is required")),
+            };
 
-            let escaped_title = title.replace('"', "\\\"");
+            let escaped_title = escape_applescript_string(title);
 
             let script = format!(
                 r#"
@@ -424,10 +425,10 @@ fn handler_cancel_event() -> ToolHandler {
 fn handler_update_event() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
-            let title = args
-                .get("title")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("title is required"))?;
+            let title = match args.get("title").and_then(|v| v.as_str()) {
+                Some(t) => t,
+                None => return Ok(error_result("title is required")),
+            };
 
             let new_title = args.get("new_title").and_then(|v| v.as_str());
             let new_location = args.get("new_location").and_then(|v| v.as_str());
@@ -439,20 +440,20 @@ fn handler_update_event() -> ToolHandler {
                 ));
             }
 
-            let escaped_title = title.replace('"', "\\\"");
+            let escaped_title = escape_applescript_string(title);
 
             // Build the property update lines dynamically
             let mut update_lines = Vec::new();
             if let Some(t) = new_title {
-                let escaped = t.replace('"', "\\\"");
+                let escaped = escape_applescript_string(t);
                 update_lines.push(format!(r#"set summary of evt to "{escaped}""#));
             }
             if let Some(loc) = new_location {
-                let escaped = loc.replace('"', "\\\"");
+                let escaped = escape_applescript_string(loc);
                 update_lines.push(format!(r#"set location of evt to "{escaped}""#));
             }
             if let Some(notes) = new_notes {
-                let escaped = notes.replace('"', "\\\"");
+                let escaped = escape_applescript_string(notes);
                 update_lines.push(format!(r#"set description of evt to "{escaped}""#));
             }
             let updates_block = update_lines.join("\n                            ");
@@ -491,12 +492,12 @@ fn handler_update_event() -> ToolHandler {
 fn handler_open_event() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
-            let title = args
-                .get("title")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("title is required"))?;
+            let title = match args.get("title").and_then(|v| v.as_str()) {
+                Some(t) => t,
+                None => return Ok(error_result("title is required")),
+            };
 
-            let escaped_title = title.replace('"', "\\\"");
+            let escaped_title = escape_applescript_string(title);
 
             let script = format!(
                 r#"
@@ -539,15 +540,15 @@ fn handler_open_event() -> ToolHandler {
 fn handler_find_available_times() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
-            let start_str = args
-                .get("start_date")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("start_date is required"))?;
+            let start_str = match args.get("start_date").and_then(|v| v.as_str()) {
+                Some(s) => s,
+                None => return Ok(error_result("start_date is required")),
+            };
 
-            let end_str = args
-                .get("end_date")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("end_date is required"))?;
+            let end_str = match args.get("end_date").and_then(|v| v.as_str()) {
+                Some(e) => e,
+                None => return Ok(error_result("end_date is required")),
+            };
 
             let min_duration_minutes = args
                 .get("min_duration_minutes")
@@ -614,12 +615,13 @@ fn handler_find_available_times() -> ToolHandler {
                     if !raw_output.trim().is_empty() {
                         for pair in raw_output.trim().split('|') {
                             let parts: Vec<&str> = pair.split(',').collect();
-                            if parts.len() == 2 {
-                                if let (Ok(s), Ok(e)) =
-                                    (parts[0].trim().parse::<i64>(), parts[1].trim().parse::<i64>())
-                                {
-                                    busy.push((s, e));
-                                }
+                            if parts.len() == 2
+                                && let (Ok(s), Ok(e)) = (
+                                    parts[0].trim().parse::<i64>(),
+                                    parts[1].trim().parse::<i64>(),
+                                )
+                            {
+                                busy.push((s, e));
                             }
                         }
                     }
@@ -630,11 +632,11 @@ fn handler_find_available_times() -> ToolHandler {
                     // Merge overlapping intervals
                     let mut merged: Vec<(i64, i64)> = Vec::new();
                     for (s, e) in &busy {
-                        if let Some(last) = merged.last_mut() {
-                            if *s <= last.1 {
-                                last.1 = last.1.max(*e);
-                                continue;
-                            }
+                        if let Some(last) = merged.last_mut()
+                            && *s <= last.1
+                        {
+                            last.1 = last.1.max(*e);
+                            continue;
                         }
                         merged.push((*s, *e));
                     }
@@ -644,27 +646,31 @@ fn handler_find_available_times() -> ToolHandler {
                     let mut cursor = range_start;
 
                     // Helper closure to clamp to working hours
-                    let clamp_to_working = |epoch: i64| -> i64 {
+                    let clamp_to_working = |epoch: i64, is_end: bool| -> i64 {
                         if !working_hours_only {
                             return epoch;
                         }
                         // Determine the hour of day for this epoch
-                        let secs_in_day = ((epoch % 86400) + 86400) % 86400;
+                        let secs_in_day = epoch.rem_euclid(86400);
                         let hour = secs_in_day / 3600;
                         let day_start = epoch - secs_in_day;
                         if hour < work_start_hour {
                             day_start + work_start_hour * 3600
                         } else if hour >= work_end_hour {
-                            // Push to next day's work start
-                            day_start + 86400 + work_start_hour * 3600
+                            if is_end {
+                                day_start + work_end_hour * 3600
+                            } else {
+                                // Push to next day's work start
+                                day_start + 86400 + work_start_hour * 3600
+                            }
                         } else {
                             epoch
                         }
                     };
 
                     for (busy_start, busy_end) in &merged {
-                        let slot_start = clamp_to_working(cursor);
-                        let slot_end = clamp_to_working(*busy_start);
+                        let slot_start = clamp_to_working(cursor, false);
+                        let slot_end = clamp_to_working(*busy_start, true);
                         if slot_end - slot_start >= min_duration_secs && slot_start < slot_end {
                             free_slots.push(json!({
                                 "start": slot_start,
@@ -676,8 +682,8 @@ fn handler_find_available_times() -> ToolHandler {
                     }
 
                     // Final slot from last busy end to range end
-                    let slot_start = clamp_to_working(cursor);
-                    let slot_end = clamp_to_working(range_end);
+                    let slot_start = clamp_to_working(cursor, false);
+                    let slot_end = clamp_to_working(range_end, true);
                     if slot_end - slot_start >= min_duration_secs && slot_start < slot_end {
                         free_slots.push(json!({
                             "start": slot_start,
@@ -687,7 +693,9 @@ fn handler_find_available_times() -> ToolHandler {
                     }
 
                     if free_slots.is_empty() {
-                        Ok(text_result("No available time slots found in the specified range."))
+                        Ok(text_result(
+                            "No available time slots found in the specified range.",
+                        ))
                     } else {
                         let json = serde_json::to_string_pretty(&free_slots)?;
                         Ok(text_result(format!(
@@ -705,6 +713,39 @@ fn handler_find_available_times() -> ToolHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::macos::applescript::{MOCK_RUNNER, ScriptRunner};
+    use std::collections::HashMap;
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    struct AssertingMock {
+        expected_fragments: Vec<&'static str>,
+        response: String,
+    }
+
+    impl ScriptRunner for AssertingMock {
+        fn run_applescript(&self, script: &str) -> anyhow::Result<String> {
+            for fragment in &self.expected_fragments {
+                assert!(
+                    script.contains(fragment),
+                    "Script missing fragment: {}\nScript content:\n{}",
+                    fragment,
+                    script
+                );
+            }
+            Ok(self.response.clone())
+        }
+        fn run_applescript_with_timeout(
+            &self,
+            script: &str,
+            _timeout: Duration,
+        ) -> anyhow::Result<String> {
+            self.run_applescript(script)
+        }
+        fn run_jxa(&self, _script: &str) -> anyhow::Result<String> {
+            unimplemented!()
+        }
+    }
 
     #[test]
     fn test_tool_schemas_valid() {
@@ -722,5 +763,377 @@ mod tests {
         assert!(names.contains(&"calendar_update_event"));
         assert!(names.contains(&"calendar_open_event"));
         assert!(names.contains(&"calendar_find_available_times"));
+    }
+
+    #[tokio::test]
+    async fn test_mock_list_calendars() {
+        let mock = Arc::new(AssertingMock {
+            expected_fragments: vec![
+                "tell application \"Calendar\"",
+                "name of c & \"|\" & writable of c",
+            ],
+            response: "Home|true\nWork|false\n".to_string(),
+        });
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_list_calendars();
+                let args = HashMap::new();
+                let result = handler(args).await.expect("Handler should not fail");
+
+                assert_eq!(result.is_error, Some(false));
+
+                let content_text = result
+                    .content
+                    .first()
+                    .and_then(|c| c.as_text())
+                    .map(|t| t.text.as_str())
+                    .expect("Expected text content");
+
+                let calendars: Vec<serde_json::Value> =
+                    serde_json::from_str(content_text).expect("Expected valid JSON array");
+
+                assert_eq!(calendars.len(), 2);
+                assert_eq!(calendars[0]["title"], "Home");
+                assert_eq!(calendars[0]["allows_modify"], true);
+                assert_eq!(calendars[1]["title"], "Work");
+                assert_eq!(calendars[1]["allows_modify"], false);
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_mock_search_events() {
+        let mock = Arc::new(AssertingMock {
+            expected_fragments: vec![
+                "tell application \"Calendar\"",
+                "start date >= now and start date <= endDate",
+                "summary of e",
+            ],
+            response: "Meeting||Monday, January 1, 2024 at 10:00:00 AM||Monday, January 1, 2024 at 11:00:00 AM||Office||Work||false\n".to_string(),
+        });
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_search_events();
+                let mut args = HashMap::new();
+                args.insert("limit".to_string(), json!(1));
+
+                let result = handler(args).await.expect("Handler should not fail");
+                assert_eq!(result.is_error, Some(false));
+
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert!(content.contains("Found 1 event(s)"));
+
+                // Extract JSON block
+                let json_start = content.find('[').expect("Expected JSON array start");
+                let events: Vec<serde_json::Value> = serde_json::from_str(&content[json_start..])
+                    .expect("Expected valid JSON array");
+
+                assert_eq!(events.len(), 1);
+                assert_eq!(events[0]["title"], "Meeting");
+                assert_eq!(events[0]["location"], "Office");
+                assert_eq!(events[0]["calendar"], "Work");
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_mock_create_event() {
+        let mock = Arc::new(AssertingMock {
+            expected_fragments: vec![
+                "tell application \"Calendar\"",
+                "make new event with properties",
+                "summary:\"New Meeting\"",
+                "location:\"Room 101\"",
+                "description:\"Important notes\"",
+            ],
+            response: "Event created: New Meeting".to_string(),
+        });
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_create_event();
+                let mut args = HashMap::new();
+                args.insert("title".to_string(), json!("New Meeting"));
+                args.insert("start_date".to_string(), json!("1712761335"));
+                args.insert("end_date".to_string(), json!("1712764935"));
+                args.insert("location".to_string(), json!("Room 101"));
+                args.insert("notes".to_string(), json!("Important notes"));
+
+                let result = handler(args).await.expect("Handler should not fail");
+                assert_eq!(result.is_error, Some(false));
+
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert_eq!(content, "Event created: New Meeting");
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_mock_create_event_escaping() {
+        let mock = Arc::new(AssertingMock {
+            expected_fragments: vec!["summary:\"Meeting with \\\"quotes\\\" and \\\\backslash\""],
+            response: "Event created: Meeting with \"quotes\" and \\backslash".to_string(),
+        });
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_create_event();
+                let mut args = HashMap::new();
+                args.insert(
+                    "title".to_string(),
+                    json!("Meeting with \"quotes\" and \\backslash"),
+                );
+                args.insert("start_date".to_string(), json!("1712761335"));
+                args.insert("end_date".to_string(), json!("1712764935"));
+
+                let result = handler(args).await.expect("Handler should not fail");
+                assert_eq!(result.is_error, Some(false));
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_mock_reschedule_event() {
+        let mock = Arc::new(AssertingMock {
+            expected_fragments: vec![
+                "set searchTitle to \"Old Meeting\"",
+                "set start date of evt to newStartDate",
+                "set end date of evt to newEndDate",
+            ],
+            response: "Event rescheduled: Old Meeting".to_string(),
+        });
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_reschedule_event();
+                let mut args = HashMap::new();
+                args.insert("title".to_string(), json!("Old Meeting"));
+                args.insert("new_start_date".to_string(), json!("1712761335"));
+                args.insert("new_end_date".to_string(), json!("1712764935"));
+
+                let result = handler(args).await.expect("Handler should not fail");
+                assert_eq!(result.is_error, Some(false));
+
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert_eq!(content, "Event rescheduled: Old Meeting");
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_mock_cancel_event() {
+        let mock = Arc::new(AssertingMock {
+            expected_fragments: vec!["set searchTitle to \"Cancel Me\"", "delete evt"],
+            response: "Event deleted: Cancel Me".to_string(),
+        });
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_cancel_event();
+                let mut args = HashMap::new();
+                args.insert("title".to_string(), json!("Cancel Me"));
+
+                let result = handler(args).await.expect("Handler should not fail");
+                assert_eq!(result.is_error, Some(false));
+
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert_eq!(content, "Event deleted: Cancel Me");
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_mock_update_event() {
+        let mock = Arc::new(AssertingMock {
+            expected_fragments: vec![
+                "set searchTitle to \"Update Me\"",
+                "set summary of evt to \"Updated Title\"",
+                "set location of evt to \"Updated Location\"",
+            ],
+            response: "Event updated: Update Me".to_string(),
+        });
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_update_event();
+                let mut args = HashMap::new();
+                args.insert("title".to_string(), json!("Update Me"));
+                args.insert("new_title".to_string(), json!("Updated Title"));
+                args.insert("new_location".to_string(), json!("Updated Location"));
+
+                let result = handler(args).await.expect("Handler should not fail");
+                assert_eq!(result.is_error, Some(false));
+
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert_eq!(content, "Event updated: Update Me");
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_mock_open_event() {
+        let mock = Arc::new(AssertingMock {
+            expected_fragments: vec![
+                "set searchTitle to \"Open Me\"",
+                "view calendar at eventDate",
+            ],
+            response: "Opened Calendar.app at event: Open Me".to_string(),
+        });
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_open_event();
+                let mut args = HashMap::new();
+                args.insert("title".to_string(), json!("Open Me"));
+
+                let result = handler(args).await.expect("Handler should not fail");
+                assert_eq!(result.is_error, Some(false));
+
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert_eq!(content, "Opened Calendar.app at event: Open Me");
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_mock_find_available_times() {
+        let mock = Arc::new(AssertingMock {
+            expected_fragments: vec![
+                "set rangeStartEpoch to 1712736000",
+                "set rangeEndEpoch to 1712779200",
+                "busyTimes",
+            ],
+            response: "1712743200,1712746800".to_string(),
+        });
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_find_available_times();
+                let mut args = HashMap::new();
+                // Range: Apr 10 08:00 UTC to Apr 10 20:00 UTC
+                args.insert("start_date".to_string(), json!("1712736000"));
+                args.insert("end_date".to_string(), json!("1712779200"));
+                args.insert("working_hours_only".to_string(), json!(true));
+
+                let result = handler(args).await.expect("Handler should not fail");
+                assert_eq!(result.is_error, Some(false));
+
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert!(content.contains("Found"));
+
+                // Extract JSON
+                let json_start = content.find('[').expect("Expected JSON array start");
+                let slots: Vec<serde_json::Value> = serde_json::from_str(&content[json_start..])
+                    .expect("Expected valid JSON array");
+
+                // Busy: 1712743200 to 1712746800 (10:00 to 11:00)
+                // Range: 1712736000 to 1712779200 (08:00 to 20:00)
+                // Work hours: 09:00 to 17:00
+                // Work Start: 1712739600 (09:00)
+                // Work End: 1712768400 (17:00)
+
+                // Slot 1: Work Start (1712739600) to Busy Start (1712743200) -> 3600s = 60 min
+                // Slot 2: Busy End (1712746800) to Work End (1712768400) -> 21600s = 360 min
+
+                assert_eq!(slots.len(), 2);
+                assert_eq!(slots[0]["start"], 1712739600);
+                assert_eq!(slots[0]["end"], 1712743200);
+                assert_eq!(slots[1]["start"], 1712746800);
+                assert_eq!(slots[1]["end"], 1712768400);
+            })
+            .await;
+    }
+
+    /// When osascript fails, the handler must return a graceful error result
+    /// (is_error == Some(true) with a human-readable message) instead of
+    /// panicking or propagating the raw anyhow error up to the MCP layer.
+    #[tokio::test]
+    async fn test_create_event_returns_error_result_on_osascript_failure() {
+        struct ErrorMock;
+        impl ScriptRunner for ErrorMock {
+            fn run_applescript(&self, _script: &str) -> anyhow::Result<String> {
+                Err(anyhow::anyhow!(
+                    "osascript: execution error: Calendar got an error: Not authorized"
+                ))
+            }
+            fn run_applescript_with_timeout(
+                &self,
+                _script: &str,
+                _timeout: Duration,
+            ) -> anyhow::Result<String> {
+                self.run_applescript(_script)
+            }
+            fn run_jxa(&self, _script: &str) -> anyhow::Result<String> {
+                unimplemented!()
+            }
+        }
+
+        let mock = Arc::new(ErrorMock);
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_create_event();
+                let mut args = HashMap::new();
+                args.insert("title".to_string(), json!("Test"));
+                args.insert("start_date".to_string(), json!("1712761335"));
+                args.insert("end_date".to_string(), json!("1712764935"));
+
+                let result = handler(args)
+                    .await
+                    .expect("Handler should not panic on osascript error");
+                assert_eq!(
+                    result.is_error,
+                    Some(true),
+                    "Expected is_error=Some(true) when osascript fails"
+                );
+
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert!(
+                    content.contains("Failed to create event"),
+                    "Expected 'Failed to create event' prefix, got: {}",
+                    content
+                );
+                assert!(
+                    content.contains("Not authorized"),
+                    "Expected the underlying error to be surfaced, got: {}",
+                    content
+                );
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_validation_create_event_requires_title() {
+        let handler = handler_create_event();
+        let mut args = HashMap::new();
+        args.insert("start_date".to_string(), json!("1712761335"));
+        args.insert("end_date".to_string(), json!("1712764935"));
+
+        let result = handler(args).await.expect("Handler should not panic");
+        assert_eq!(result.is_error, Some(true));
+        assert!(
+            result.content[0]
+                .as_text()
+                .unwrap()
+                .text
+                .contains("title is required")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_validation_cancel_event_requires_title() {
+        let handler = handler_cancel_event();
+        let args = HashMap::new();
+
+        let result = handler(args).await.expect("Handler should not panic");
+        assert_eq!(result.is_error, Some(true));
+        assert!(
+            result.content[0]
+                .as_text()
+                .unwrap()
+                .text
+                .contains("title is required")
+        );
     }
 }

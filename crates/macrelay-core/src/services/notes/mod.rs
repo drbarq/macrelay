@@ -3,7 +3,8 @@ use std::sync::Arc;
 use rmcp::model::Tool;
 use serde_json::json;
 
-use crate::registry::{error_result, schema_from_json, text_result, ServiceRegistry, ToolHandler};
+use crate::macos::escape::escape_applescript_string;
+use crate::registry::{ServiceRegistry, ToolHandler, error_result, schema_from_json, text_result};
 
 /// Register all Notes tools with the service registry.
 pub fn register(registry: &mut ServiceRegistry) {
@@ -260,22 +261,22 @@ fn handler_list_folders() -> ToolHandler {
 fn handler_search_notes() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
-            let query = args
-                .get("query")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("query is required"))?;
+            let query = match args.get("query").and_then(|v| v.as_str()) {
+                Some(q) => q,
+                None => return Ok(error_result("query is required")),
+            };
 
             let folder_filter = args.get("folder").and_then(|v| v.as_str()).unwrap_or("");
             let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(50);
             let offset = args.get("offset").and_then(|v| v.as_u64()).unwrap_or(0);
 
-            let escaped_query = query.replace('"', "\\\"");
+            let escaped_query = escape_applescript_string(query);
 
             // Build the folder iteration clause
             let folder_clause = if folder_filter.is_empty() {
                 "repeat with f in folders of a".to_string()
             } else {
-                let escaped_folder = folder_filter.replace('"', "\\\"");
+                let escaped_folder = escape_applescript_string(folder_filter);
                 format!(r#"repeat with f in {{folder "{escaped_folder}" of a}}"#)
             };
 
@@ -346,12 +347,12 @@ fn handler_search_notes() -> ToolHandler {
 fn handler_read_note() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
-            let name = args
-                .get("name")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("name is required"))?;
+            let name = match args.get("name").and_then(|v| v.as_str()) {
+                Some(n) => n,
+                None => return Ok(error_result("name is required")),
+            };
 
-            let escaped_name = name.replace('"', "\\\"");
+            let escaped_name = escape_applescript_string(name);
 
             let script = format!(
                 r#"
@@ -375,7 +376,9 @@ fn handler_read_note() -> ToolHandler {
             match crate::macos::applescript::run_applescript(&script) {
                 Ok(output) => {
                     if output.starts_with("ERROR:") {
-                        Ok(error_result(output.trim_start_matches("ERROR:").to_string()))
+                        Ok(error_result(
+                            output.trim_start_matches("ERROR:").to_string(),
+                        ))
                     } else {
                         Ok(text_result(output))
                     }
@@ -389,15 +392,14 @@ fn handler_read_note() -> ToolHandler {
 fn handler_write_note() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
-            let title = args
-                .get("title")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("title is required"))?;
-
-            let body = args
-                .get("body")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("body is required"))?;
+            let title = match args.get("title").and_then(|v| v.as_str()) {
+                Some(t) => t,
+                None => return Ok(error_result("title is required")),
+            };
+            let body = match args.get("body").and_then(|v| v.as_str()) {
+                Some(b) => b,
+                None => return Ok(error_result("body is required")),
+            };
 
             let folder = args
                 .get("folder")
@@ -406,13 +408,13 @@ fn handler_write_note() -> ToolHandler {
 
             let account = args.get("account").and_then(|v| v.as_str());
 
-            let escaped_title = title.replace('"', "\\\"");
-            let escaped_body = body.replace('"', "\\\"");
-            let escaped_folder = folder.replace('"', "\\\"");
+            let escaped_title = escape_applescript_string(title);
+            let escaped_body = escape_applescript_string(body);
+            let escaped_folder = escape_applescript_string(folder);
 
             let script = if let Some(acct) = account {
                 // Account explicitly specified - scope to that account only
-                let escaped_account = acct.replace('"', "\\\"");
+                let escaped_account = escape_applescript_string(acct);
                 format!(
                     r#"
                     tell application "Notes"
@@ -495,7 +497,9 @@ fn handler_write_note() -> ToolHandler {
             match crate::macos::applescript::run_applescript(&script) {
                 Ok(output) => {
                     if output.starts_with("ERROR:") {
-                        Ok(error_result(output.trim_start_matches("ERROR:").to_string()))
+                        Ok(error_result(
+                            output.trim_start_matches("ERROR:").to_string(),
+                        ))
                     } else {
                         Ok(text_result(output))
                     }
@@ -509,12 +513,12 @@ fn handler_write_note() -> ToolHandler {
 fn handler_delete_note() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
-            let name = args
-                .get("name")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("name is required"))?;
+            let name = match args.get("name").and_then(|v| v.as_str()) {
+                Some(n) => n,
+                None => return Ok(error_result("name is required")),
+            };
 
-            let escaped_name = name.replace('"', "\\\"");
+            let escaped_name = escape_applescript_string(name);
 
             let script = format!(
                 r#"
@@ -533,7 +537,9 @@ fn handler_delete_note() -> ToolHandler {
             match crate::macos::applescript::run_applescript(&script) {
                 Ok(output) => {
                     if output.starts_with("ERROR:") {
-                        Ok(error_result(output.trim_start_matches("ERROR:").to_string()))
+                        Ok(error_result(
+                            output.trim_start_matches("ERROR:").to_string(),
+                        ))
                     } else {
                         Ok(text_result(output))
                     }
@@ -547,10 +553,10 @@ fn handler_delete_note() -> ToolHandler {
 fn handler_restore_note() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
-            let name = args
-                .get("name")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("name is required"))?;
+            let name = match args.get("name").and_then(|v| v.as_str()) {
+                Some(n) => n,
+                None => return Ok(error_result("name is required")),
+            };
 
             let folder = args
                 .get("folder")
@@ -559,13 +565,13 @@ fn handler_restore_note() -> ToolHandler {
 
             let account = args.get("account").and_then(|v| v.as_str());
 
-            let escaped_name = name.replace('"', "\\\"");
-            let escaped_folder = folder.replace('"', "\\\"");
+            let escaped_name = escape_applescript_string(name);
+            let escaped_folder = escape_applescript_string(folder);
 
             let script = if let Some(acct) = account {
                 // Account explicitly specified. Avoid all reference-chain iteration:
                 // direct by-name lookups + `whose` filters keep references concrete.
-                let escaped_account = acct.replace('"', "\\\"");
+                let escaped_account = escape_applescript_string(acct);
                 format!(
                     r#"
                     tell application "Notes"
@@ -676,7 +682,9 @@ fn handler_restore_note() -> ToolHandler {
             match crate::macos::applescript::run_applescript(&script) {
                 Ok(output) => {
                     if output.starts_with("ERROR:") {
-                        Ok(error_result(output.trim_start_matches("ERROR:").to_string()))
+                        Ok(error_result(
+                            output.trim_start_matches("ERROR:").to_string(),
+                        ))
                     } else {
                         Ok(text_result(output))
                     }
@@ -690,12 +698,12 @@ fn handler_restore_note() -> ToolHandler {
 fn handler_open_note() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
-            let name = args
-                .get("name")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("name is required"))?;
+            let name = match args.get("name").and_then(|v| v.as_str()) {
+                Some(n) => n,
+                None => return Ok(error_result("name is required")),
+            };
 
-            let escaped_name = name.replace('"', "\\\"");
+            let escaped_name = escape_applescript_string(name);
 
             let script = format!(
                 r#"
@@ -716,7 +724,9 @@ fn handler_open_note() -> ToolHandler {
             match crate::macos::applescript::run_applescript(&script) {
                 Ok(output) => {
                     if output.starts_with("ERROR:") {
-                        Ok(error_result(output.trim_start_matches("ERROR:").to_string()))
+                        Ok(error_result(
+                            output.trim_start_matches("ERROR:").to_string(),
+                        ))
                     } else {
                         Ok(text_result(output))
                     }
@@ -730,6 +740,37 @@ fn handler_open_note() -> ToolHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::macos::applescript::{MOCK_RUNNER, ScriptRunner};
+    use std::collections::HashMap;
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    struct AssertingMock {
+        expected_fragment: String,
+        response: String,
+    }
+
+    impl ScriptRunner for AssertingMock {
+        fn run_applescript(&self, script: &str) -> anyhow::Result<String> {
+            assert!(
+                script.contains(&self.expected_fragment),
+                "script missing fragment {:?}: {}",
+                self.expected_fragment,
+                script
+            );
+            Ok(self.response.clone())
+        }
+        fn run_applescript_with_timeout(
+            &self,
+            _script: &str,
+            _timeout: Duration,
+        ) -> anyhow::Result<String> {
+            unimplemented!()
+        }
+        fn run_jxa(&self, _script: &str) -> anyhow::Result<String> {
+            unimplemented!()
+        }
+    }
 
     #[test]
     fn test_tool_schemas_valid() {
@@ -756,12 +797,310 @@ mod tests {
         let tools = registry.list_tools();
 
         for tool_name in &["notes_write_note", "notes_restore_note"] {
-            let tool = tools.iter().find(|t| t.name.as_ref() == *tool_name).unwrap();
-            let props = tool.input_schema.get("properties").and_then(|v| v.as_object());
+            let tool = tools
+                .iter()
+                .find(|t| t.name.as_ref() == *tool_name)
+                .unwrap();
+            let props = tool
+                .input_schema
+                .get("properties")
+                .and_then(|v| v.as_object());
             assert!(
                 props.is_some_and(|p| p.contains_key("account")),
                 "{tool_name} should have an 'account' parameter"
             );
         }
+    }
+
+    #[tokio::test]
+    async fn test_mock_list_accounts() {
+        let mock = Arc::new(AssertingMock {
+            expected_fragment: "repeat with a in accounts".to_string(),
+            response: "iCloud\nOn My Mac\n".to_string(),
+        });
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_list_accounts();
+                let result = handler(HashMap::new()).await.unwrap();
+                assert_eq!(result.is_error, Some(false));
+
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert!(content.contains("Found 2 account(s)"));
+                assert!(content.contains("iCloud"));
+                assert!(content.contains("On My Mac"));
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_mock_list_folders() {
+        let mock = Arc::new(AssertingMock {
+            expected_fragment: "repeat with f in folders of a".to_string(),
+            response: "Notes||iCloud\nReceipts||iCloud\n".to_string(),
+        });
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_list_folders();
+                let result = handler(HashMap::new()).await.unwrap();
+                assert_eq!(result.is_error, Some(false));
+
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert!(content.contains("Found 2 folder(s)"));
+                assert!(content.contains("\"folder\": \"Notes\""));
+                assert!(content.contains("\"account\": \"iCloud\""));
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_mock_search_notes() {
+        let mock = Arc::new(AssertingMock {
+            expected_fragment: "set searchQuery to \"My\"".to_string(),
+            response: "My Note||Notes||iCloud||Monday, January 1, 2024 at 12:00:00 PM\n"
+                .to_string(),
+        });
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_search_notes();
+                let mut args = HashMap::new();
+                args.insert("query".to_string(), json!("My"));
+
+                let result = handler(args).await.unwrap();
+                assert_eq!(result.is_error, Some(false));
+
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert!(content.contains("Found 1 note(s)"));
+                assert!(content.contains("\"name\": \"My Note\""));
+                assert!(
+                    content.contains("\"modified\": \"Monday, January 1, 2024 at 12:00:00 PM\"")
+                );
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_mock_read_note() {
+        let mock = Arc::new(AssertingMock {
+            expected_fragment: "every note whose name is \"My Note\"".to_string(),
+            response: "NAME:My Note\nFOLDER:Notes\nCREATED:Jan 1\nMODIFIED:Jan 1\nBODY:\nHello"
+                .to_string(),
+        });
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_read_note();
+                let mut args = HashMap::new();
+                args.insert("name".to_string(), json!("My Note"));
+
+                let result = handler(args).await.unwrap();
+                assert_eq!(result.is_error, Some(false));
+
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert!(content.contains("NAME:My Note"));
+                assert!(content.contains("BODY:\nHello"));
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_mock_write_note() {
+        let mock = Arc::new(AssertingMock {
+            expected_fragment:
+                "make new note at targetFolder with properties {name:\"New Note\", body:\"Hello\"}"
+                    .to_string(),
+            response: "Note created: New Note in folder Notes (account: iCloud)".to_string(),
+        });
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_write_note();
+                let mut args = HashMap::new();
+                args.insert("title".to_string(), json!("New Note"));
+                args.insert("body".to_string(), json!("Hello"));
+
+                let result = handler(args).await.unwrap();
+                assert_eq!(result.is_error, Some(false));
+
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert!(content.contains("Note created: New Note"));
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_mock_write_note_escaping() {
+        let mock = Arc::new(AssertingMock {
+            expected_fragment: "name:\"Note with \\\"quotes\\\" and \\\\backslash\"".to_string(),
+            response: "Note created: Note with \"quotes\" and \\backslash".to_string(),
+        });
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_write_note();
+                let mut args = HashMap::new();
+                args.insert(
+                    "title".to_string(),
+                    json!("Note with \"quotes\" and \\backslash"),
+                );
+                args.insert("body".to_string(), json!("Hello"));
+
+                let result = handler(args).await.unwrap();
+                assert_eq!(result.is_error, Some(false));
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_mock_delete_note() {
+        let mock = Arc::new(AssertingMock {
+            expected_fragment: "delete item 1 of matchedNotes".to_string(),
+            response: "Deleted note: My Note (moved to Recently Deleted)".to_string(),
+        });
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_delete_note();
+                let mut args = HashMap::new();
+                args.insert("name".to_string(), json!("My Note"));
+
+                let result = handler(args).await.unwrap();
+                assert_eq!(result.is_error, Some(false));
+
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert!(content.contains("Deleted note: My Note"));
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_mock_restore_note() {
+        let mock = Arc::new(AssertingMock {
+            expected_fragment: "move (item 1 of matches) to folder \"Notes\"".to_string(),
+            response: "Restored note: My Note to folder Notes (account: iCloud)".to_string(),
+        });
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_restore_note();
+                let mut args = HashMap::new();
+                args.insert("name".to_string(), json!("My Note"));
+
+                let result = handler(args).await.unwrap();
+                assert_eq!(result.is_error, Some(false));
+
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert!(content.contains("Restored note: My Note"));
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_mock_open_note() {
+        let mock = Arc::new(AssertingMock {
+            expected_fragment: "show theNote".to_string(),
+            response: "Opened note: My Note".to_string(),
+        });
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_open_note();
+                let mut args = HashMap::new();
+                args.insert("name".to_string(), json!("My Note"));
+
+                let result = handler(args).await.unwrap();
+                assert_eq!(result.is_error, Some(false));
+
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert!(content.contains("Opened note: My Note"));
+            })
+            .await;
+    }
+
+    /// When osascript fails, write_note must return a graceful error result
+    /// instead of panicking or propagating a raw anyhow error.
+    #[tokio::test]
+    async fn test_write_note_returns_error_result_on_osascript_failure() {
+        struct ErrorMock;
+        impl ScriptRunner for ErrorMock {
+            fn run_applescript(&self, _script: &str) -> anyhow::Result<String> {
+                Err(anyhow::anyhow!(
+                    "osascript: Notes got an error: Not authorized to send Apple events"
+                ))
+            }
+            fn run_applescript_with_timeout(
+                &self,
+                _script: &str,
+                _timeout: Duration,
+            ) -> anyhow::Result<String> {
+                unimplemented!()
+            }
+            fn run_jxa(&self, _script: &str) -> anyhow::Result<String> {
+                unimplemented!()
+            }
+        }
+
+        let mock = Arc::new(ErrorMock);
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_write_note();
+                let mut args = HashMap::new();
+                args.insert("title".to_string(), json!("Test"));
+                args.insert("body".to_string(), json!("Body"));
+
+                let result = handler(args)
+                    .await
+                    .expect("Handler should not panic on osascript error");
+                assert_eq!(result.is_error, Some(true));
+
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert!(
+                    content.to_lowercase().contains("fail")
+                        || content.to_lowercase().contains("error"),
+                    "Expected a human-readable error, got: {}",
+                    content
+                );
+                assert!(
+                    content.contains("Not authorized"),
+                    "Expected underlying error to be surfaced, got: {}",
+                    content
+                );
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_validation_write_note_requires_title() {
+        let handler = handler_write_note();
+        let mut args = HashMap::new();
+        args.insert("body".to_string(), json!("Body"));
+
+        let result = handler(args).await.expect("Handler should not panic");
+        assert_eq!(result.is_error, Some(true));
+        assert!(
+            result.content[0]
+                .as_text()
+                .unwrap()
+                .text
+                .contains("title is required")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_validation_read_note_requires_name() {
+        let handler = handler_read_note();
+        let args = HashMap::new();
+
+        let result = handler(args).await.expect("Handler should not panic");
+        assert_eq!(result.is_error, Some(true));
+        assert!(
+            result.content[0]
+                .as_text()
+                .unwrap()
+                .text
+                .contains("name is required")
+        );
     }
 }

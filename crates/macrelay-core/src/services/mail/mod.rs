@@ -3,7 +3,8 @@ use std::sync::Arc;
 use rmcp::model::Tool;
 use serde_json::json;
 
-use crate::registry::{error_result, schema_from_json, text_result, ServiceRegistry, ToolHandler};
+use crate::macos::escape::escape_applescript_string;
+use crate::registry::{ServiceRegistry, ToolHandler, error_result, schema_from_json, text_result};
 
 /// Register all mail tools with the service registry.
 pub fn register(registry: &mut ServiceRegistry) {
@@ -460,12 +461,12 @@ fn handler_list_accounts() -> ToolHandler {
 fn handler_list_mailboxes() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
-            let account = args
-                .get("account")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("account is required"))?;
+            let account = match args.get("account").and_then(|v| v.as_str()) {
+                Some(a) => a,
+                None => return Ok(error_result("account is required")),
+            };
 
-            let escaped_account = account.replace('"', "\\\"");
+            let escaped_account = escape_applescript_string(account);
 
             let script = format!(
                 r#"
@@ -521,14 +522,8 @@ fn handler_list_mailboxes() -> ToolHandler {
 fn handler_search_messages() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
-            let limit = args
-                .get("limit")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(25) as usize;
-            let offset = args
-                .get("offset")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0) as usize;
+            let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(25) as usize;
+            let offset = args.get("offset").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
             let mailbox = args
                 .get("mailbox")
                 .and_then(|v| v.as_str())
@@ -540,16 +535,16 @@ fn handler_search_messages() -> ToolHandler {
             let _date_from = args.get("date_from").and_then(|v| v.as_str()).unwrap_or("");
             let _date_to = args.get("date_to").and_then(|v| v.as_str()).unwrap_or("");
 
-            let escaped_mailbox = mailbox.replace('"', "\\\"");
+            let escaped_mailbox = escape_applescript_string(mailbox);
 
             // Build a whose clause for AppleScript filtering
             let mut whose_parts: Vec<String> = Vec::new();
             if !subject_filter.is_empty() {
-                let escaped = subject_filter.replace('"', "\\\"");
+                let escaped = escape_applescript_string(subject_filter);
                 whose_parts.push(format!(r#"subject contains "{escaped}""#));
             }
             if !sender_filter.is_empty() {
-                let escaped = sender_filter.replace('"', "\\\"");
+                let escaped = escape_applescript_string(sender_filter);
                 whose_parts.push(format!(r#"sender contains "{escaped}""#));
             }
 
@@ -563,7 +558,7 @@ fn handler_search_messages() -> ToolHandler {
             let fetch_limit = offset + limit + 100;
 
             let account_loop = if let Some(acct) = account_filter {
-                let escaped = acct.replace('"', "\\\"");
+                let escaped = escape_applescript_string(acct);
                 format!(r#"repeat with acct in {{account "{escaped}"}}"#)
             } else {
                 "repeat with acct in every account".to_string()
@@ -632,7 +627,9 @@ fn handler_search_messages() -> ToolHandler {
                         results.into_iter().skip(offset).take(limit).collect();
 
                     if paginated.is_empty() {
-                        Ok(text_result("No messages found matching the search criteria."))
+                        Ok(text_result(
+                            "No messages found matching the search criteria.",
+                        ))
                     } else {
                         let json_str = serde_json::to_string_pretty(&paginated)?;
                         Ok(text_result(format!(
@@ -651,25 +648,22 @@ fn handler_search_messages() -> ToolHandler {
 fn handler_get_messages() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
-            let subject = args
-                .get("subject")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("subject is required"))?;
-            let limit = args
-                .get("limit")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(5) as usize;
+            let subject = match args.get("subject").and_then(|v| v.as_str()) {
+                Some(s) => s,
+                None => return Ok(error_result("subject is required")),
+            };
+            let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(5) as usize;
             let mailbox = args
                 .get("mailbox")
                 .and_then(|v| v.as_str())
                 .unwrap_or("INBOX");
             let account_filter = args.get("account").and_then(|v| v.as_str());
 
-            let escaped_subject = subject.replace('"', "\\\"");
-            let escaped_mailbox = mailbox.replace('"', "\\\"");
+            let escaped_subject = escape_applescript_string(subject);
+            let escaped_mailbox = escape_applescript_string(mailbox);
 
             let account_loop = if let Some(acct) = account_filter {
-                let escaped = acct.replace('"', "\\\"");
+                let escaped = escape_applescript_string(acct);
                 format!(r#"repeat with acct in {{account "{escaped}"}}"#)
             } else {
                 "repeat with acct in every account".to_string()
@@ -791,14 +785,11 @@ fn handler_get_messages() -> ToolHandler {
 fn handler_get_thread() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
-            let subject = args
-                .get("subject")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("subject is required"))?;
-            let limit = args
-                .get("limit")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(20) as usize;
+            let subject = match args.get("subject").and_then(|v| v.as_str()) {
+                Some(s) => s,
+                None => return Ok(error_result("subject is required")),
+            };
+            let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(20) as usize;
             let account_filter = args.get("account").and_then(|v| v.as_str());
 
             // Strip common prefixes to find the base subject for thread matching
@@ -807,10 +798,10 @@ fn handler_get_thread() -> ToolHandler {
                 .trim_start_matches("RE: ")
                 .trim_start_matches("Fwd: ")
                 .trim_start_matches("FWD: ");
-            let escaped_subject = base_subject.replace('"', "\\\"");
+            let escaped_subject = escape_applescript_string(base_subject);
 
             let account_loop = if let Some(acct) = account_filter {
-                let escaped = acct.replace('"', "\\\"");
+                let escaped = escape_applescript_string(acct);
                 format!(r#"repeat with acct in {{account "{escaped}"}}"#)
             } else {
                 "repeat with acct in every account".to_string()
@@ -914,32 +905,29 @@ fn handler_get_thread() -> ToolHandler {
 fn handler_compose_message() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
-            let to = args
-                .get("to")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("to is required"))?;
-            let subject = args
-                .get("subject")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("subject is required"))?;
-            let body = args
-                .get("body")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("body is required"))?;
+            let to = match args.get("to").and_then(|v| v.as_str()) {
+                Some(t) => t,
+                None => return Ok(error_result("to is required")),
+            };
+            let subject = match args.get("subject").and_then(|v| v.as_str()) {
+                Some(s) => s,
+                None => return Ok(error_result("subject is required")),
+            };
+            let body = match args.get("body").and_then(|v| v.as_str()) {
+                Some(b) => b,
+                None => return Ok(error_result("body is required")),
+            };
             let cc = args.get("cc").and_then(|v| v.as_str()).unwrap_or("");
             let bcc = args.get("bcc").and_then(|v| v.as_str()).unwrap_or("");
-            let send = args
-                .get("send")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
+            let send = args.get("send").and_then(|v| v.as_bool()).unwrap_or(false);
 
-            let escaped_subject = subject.replace('"', "\\\"");
-            let escaped_body = body.replace('"', "\\\"");
+            let escaped_subject = escape_applescript_string(subject);
+            let escaped_body = escape_applescript_string(body);
 
             // Build recipient lines for to, cc, bcc
             let mut recipient_lines = String::new();
             for addr in to.split(',') {
-                let addr = addr.trim().replace('"', "\\\"");
+                let addr = escape_applescript_string(addr.trim());
                 if !addr.is_empty() {
                     recipient_lines.push_str(&format!(
                         "make new to recipient at end of to recipients with properties {{address:\"{addr}\"}}\n"
@@ -947,7 +935,7 @@ fn handler_compose_message() -> ToolHandler {
                 }
             }
             for addr in cc.split(',') {
-                let addr = addr.trim().replace('"', "\\\"");
+                let addr = escape_applescript_string(addr.trim());
                 if !addr.is_empty() {
                     recipient_lines.push_str(&format!(
                         "make new cc recipient at end of cc recipients with properties {{address:\"{addr}\"}}\n"
@@ -955,7 +943,7 @@ fn handler_compose_message() -> ToolHandler {
                 }
             }
             for addr in bcc.split(',') {
-                let addr = addr.trim().replace('"', "\\\"");
+                let addr = escape_applescript_string(addr.trim());
                 if !addr.is_empty() {
                     recipient_lines.push_str(&format!(
                         "make new bcc recipient at end of bcc recipients with properties {{address:\"{addr}\"}}\n"
@@ -996,10 +984,10 @@ fn handler_compose_message() -> ToolHandler {
 fn handler_reply_message() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
-            let subject = args
-                .get("subject")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("subject is required"))?;
+            let subject = match args.get("subject").and_then(|v| v.as_str()) {
+                Some(s) => s,
+                None => return Ok(error_result("subject is required")),
+            };
             let reply_text = args
                 .get("reply_text")
                 .and_then(|v| v.as_str())
@@ -1014,12 +1002,12 @@ fn handler_reply_message() -> ToolHandler {
                 .unwrap_or("INBOX");
             let account_filter = args.get("account").and_then(|v| v.as_str());
 
-            let escaped_subject = subject.replace('"', "\\\"");
-            let escaped_mailbox = mailbox.replace('"', "\\\"");
-            let escaped_reply_text = reply_text.replace('"', "\\\"");
+            let escaped_subject = escape_applescript_string(subject);
+            let escaped_mailbox = escape_applescript_string(mailbox);
+            let escaped_reply_text = escape_applescript_string(reply_text);
 
             let account_loop = if let Some(acct) = account_filter {
-                let escaped = acct.replace('"', "\\\"");
+                let escaped = escape_applescript_string(acct);
                 format!(r#"repeat with acct in {{account "{escaped}"}}"#)
             } else {
                 "repeat with acct in every account".to_string()
@@ -1071,14 +1059,14 @@ fn handler_reply_message() -> ToolHandler {
 fn handler_forward_message() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
-            let subject = args
-                .get("subject")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("subject is required"))?;
-            let to = args
-                .get("to")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("to is required"))?;
+            let subject = match args.get("subject").and_then(|v| v.as_str()) {
+                Some(s) => s,
+                None => return Ok(error_result("subject is required")),
+            };
+            let to = match args.get("to").and_then(|v| v.as_str()) {
+                Some(t) => t,
+                None => return Ok(error_result("to is required")),
+            };
             let forward_text = args
                 .get("forward_text")
                 .and_then(|v| v.as_str())
@@ -1089,13 +1077,13 @@ fn handler_forward_message() -> ToolHandler {
                 .unwrap_or("INBOX");
             let account_filter = args.get("account").and_then(|v| v.as_str());
 
-            let escaped_subject = subject.replace('"', "\\\"");
-            let escaped_mailbox = mailbox.replace('"', "\\\"");
-            let escaped_to = to.replace('"', "\\\"");
-            let escaped_forward_text = forward_text.replace('"', "\\\"");
+            let escaped_subject = escape_applescript_string(subject);
+            let escaped_mailbox = escape_applescript_string(mailbox);
+            let escaped_to = escape_applescript_string(to);
+            let escaped_forward_text = escape_applescript_string(forward_text);
 
             let account_loop = if let Some(acct) = account_filter {
-                let escaped = acct.replace('"', "\\\"");
+                let escaped = escape_applescript_string(acct);
                 format!(r#"repeat with acct in {{account "{escaped}"}}"#)
             } else {
                 "repeat with acct in every account".to_string()
@@ -1144,26 +1132,26 @@ fn handler_forward_message() -> ToolHandler {
 fn handler_update_read_state() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
-            let subject = args
-                .get("subject")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("subject is required"))?;
-            let read = args
-                .get("read")
-                .and_then(|v| v.as_bool())
-                .ok_or_else(|| anyhow::anyhow!("read is required"))?;
+            let subject = match args.get("subject").and_then(|v| v.as_str()) {
+                Some(s) => s,
+                None => return Ok(error_result("subject is required")),
+            };
+            let read = match args.get("read").and_then(|v| v.as_bool()) {
+                Some(r) => r,
+                None => return Ok(error_result("read is required")),
+            };
             let mailbox = args
                 .get("mailbox")
                 .and_then(|v| v.as_str())
                 .unwrap_or("INBOX");
             let account_filter = args.get("account").and_then(|v| v.as_str());
 
-            let escaped_subject = subject.replace('"', "\\\"");
-            let escaped_mailbox = mailbox.replace('"', "\\\"");
+            let escaped_subject = escape_applescript_string(subject);
+            let escaped_mailbox = escape_applescript_string(mailbox);
             let read_str = if read { "true" } else { "false" };
 
             let account_loop = if let Some(acct) = account_filter {
-                let escaped = acct.replace('"', "\\\"");
+                let escaped = escape_applescript_string(acct);
                 format!(r#"repeat with acct in {{account "{escaped}"}}"#)
             } else {
                 "repeat with acct in every account".to_string()
@@ -1205,14 +1193,14 @@ fn handler_update_read_state() -> ToolHandler {
 fn handler_move_message() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
-            let subject = args
-                .get("subject")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("subject is required"))?;
-            let target_mailbox = args
-                .get("target_mailbox")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("target_mailbox is required"))?;
+            let subject = match args.get("subject").and_then(|v| v.as_str()) {
+                Some(s) => s,
+                None => return Ok(error_result("subject is required")),
+            };
+            let target_mailbox = match args.get("target_mailbox").and_then(|v| v.as_str()) {
+                Some(tm) => tm,
+                None => return Ok(error_result("target_mailbox is required")),
+            };
             let target_account = args.get("target_account").and_then(|v| v.as_str());
             let mailbox = args
                 .get("mailbox")
@@ -1220,12 +1208,12 @@ fn handler_move_message() -> ToolHandler {
                 .unwrap_or("INBOX");
             let account_filter = args.get("account").and_then(|v| v.as_str());
 
-            let escaped_subject = subject.replace('"', "\\\"");
-            let escaped_mailbox = mailbox.replace('"', "\\\"");
-            let escaped_target = target_mailbox.replace('"', "\\\"");
+            let escaped_subject = escape_applescript_string(subject);
+            let escaped_mailbox = escape_applescript_string(mailbox);
+            let escaped_target = escape_applescript_string(target_mailbox);
 
             let account_loop = if let Some(acct) = account_filter {
-                let escaped = acct.replace('"', "\\\"");
+                let escaped = escape_applescript_string(acct);
                 format!(r#"repeat with acct in {{account "{escaped}"}}"#)
             } else {
                 "repeat with acct in every account".to_string()
@@ -1233,7 +1221,7 @@ fn handler_move_message() -> ToolHandler {
 
             // Determine the target mailbox reference
             let target_ref = if let Some(ta) = target_account {
-                let escaped_ta = ta.replace('"', "\\\"");
+                let escaped_ta = escape_applescript_string(ta);
                 format!(r#"mailbox "{escaped_target}" of account "{escaped_ta}""#)
             } else {
                 // Use the same account as the source
@@ -1276,21 +1264,21 @@ fn handler_move_message() -> ToolHandler {
 fn handler_delete_message() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
-            let subject = args
-                .get("subject")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("subject is required"))?;
+            let subject = match args.get("subject").and_then(|v| v.as_str()) {
+                Some(s) => s,
+                None => return Ok(error_result("subject is required")),
+            };
             let mailbox = args
                 .get("mailbox")
                 .and_then(|v| v.as_str())
                 .unwrap_or("INBOX");
             let account_filter = args.get("account").and_then(|v| v.as_str());
 
-            let escaped_subject = subject.replace('"', "\\\"");
-            let escaped_mailbox = mailbox.replace('"', "\\\"");
+            let escaped_subject = escape_applescript_string(subject);
+            let escaped_mailbox = escape_applescript_string(mailbox);
 
             let account_loop = if let Some(acct) = account_filter {
-                let escaped = acct.replace('"', "\\\"");
+                let escaped = escape_applescript_string(acct);
                 format!(r#"repeat with acct in {{account "{escaped}"}}"#)
             } else {
                 "repeat with acct in every account".to_string()
@@ -1332,21 +1320,21 @@ fn handler_delete_message() -> ToolHandler {
 fn handler_open_message() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
-            let subject = args
-                .get("subject")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("subject is required"))?;
+            let subject = match args.get("subject").and_then(|v| v.as_str()) {
+                Some(s) => s,
+                None => return Ok(error_result("subject is required")),
+            };
             let mailbox = args
                 .get("mailbox")
                 .and_then(|v| v.as_str())
                 .unwrap_or("INBOX");
             let account_filter = args.get("account").and_then(|v| v.as_str());
 
-            let escaped_subject = subject.replace('"', "\\\"");
-            let escaped_mailbox = mailbox.replace('"', "\\\"");
+            let escaped_subject = escape_applescript_string(subject);
+            let escaped_mailbox = escape_applescript_string(mailbox);
 
             let account_loop = if let Some(acct) = account_filter {
-                let escaped = acct.replace('"', "\\\"");
+                let escaped = escape_applescript_string(acct);
                 format!(r#"repeat with acct in {{account "{escaped}"}}"#)
             } else {
                 "repeat with acct in every account".to_string()
@@ -1389,21 +1377,21 @@ fn handler_open_message() -> ToolHandler {
 fn handler_get_attachment() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
-            let subject = args
-                .get("subject")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("subject is required"))?;
+            let subject = match args.get("subject").and_then(|v| v.as_str()) {
+                Some(s) => s,
+                None => return Ok(error_result("subject is required")),
+            };
             let mailbox = args
                 .get("mailbox")
                 .and_then(|v| v.as_str())
                 .unwrap_or("INBOX");
             let account_filter = args.get("account").and_then(|v| v.as_str());
 
-            let escaped_subject = subject.replace('"', "\\\"");
-            let escaped_mailbox = mailbox.replace('"', "\\\"");
+            let escaped_subject = escape_applescript_string(subject);
+            let escaped_mailbox = escape_applescript_string(mailbox);
 
             let account_loop = if let Some(acct) = account_filter {
-                let escaped = acct.replace('"', "\\\"");
+                let escaped = escape_applescript_string(acct);
                 format!(r#"repeat with acct in {{account "{escaped}"}}"#)
             } else {
                 "repeat with acct in every account".to_string()
@@ -1487,9 +1475,42 @@ fn handler_get_attachment() -> ToolHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::macos::applescript::{MOCK_RUNNER, ScriptRunner};
+    use std::collections::HashMap;
+    use std::sync::Arc;
+    use std::time::Duration;
 
-    #[test]
-    fn test_tool_schemas_valid() {
+    struct AssertingMailMock {
+        expected_fragments: Vec<String>,
+        response: String,
+    }
+
+    impl ScriptRunner for AssertingMailMock {
+        fn run_applescript(&self, script: &str) -> anyhow::Result<String> {
+            for fragment in &self.expected_fragments {
+                assert!(
+                    script.contains(fragment),
+                    "Script missing fragment: {}\nScript: {}",
+                    fragment,
+                    script
+                );
+            }
+            Ok(self.response.clone())
+        }
+        fn run_applescript_with_timeout(
+            &self,
+            script: &str,
+            _timeout: Duration,
+        ) -> anyhow::Result<String> {
+            self.run_applescript(script)
+        }
+        fn run_jxa(&self, _script: &str) -> anyhow::Result<String> {
+            unimplemented!()
+        }
+    }
+
+    #[tokio::test]
+    async fn test_tool_schemas_valid() {
         let mut registry = ServiceRegistry::new();
         register(&mut registry);
         let tools = registry.list_tools();
@@ -1509,5 +1530,424 @@ mod tests {
         assert!(names.contains(&"mail_delete_message"));
         assert!(names.contains(&"mail_open_message"));
         assert!(names.contains(&"mail_get_attachment"));
+    }
+
+    #[tokio::test]
+    async fn test_mail_list_accounts() {
+        let mock = Arc::new(AssertingMailMock {
+            expected_fragments: vec!["every account".to_string()],
+            response: "Personal||me@example.com\nWork||job@work.com".to_string(),
+        });
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_list_accounts();
+                let args = HashMap::new();
+                let result = handler(args).await.unwrap();
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert!(content.contains("Personal"));
+                assert!(content.contains("me@example.com"));
+                assert!(content.contains("Work"));
+                assert!(content.contains("job@work.com"));
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_mail_list_mailboxes() {
+        let mock = Arc::new(AssertingMailMock {
+            expected_fragments: vec![
+                "account \"Personal\"".to_string(),
+                "every mailbox of acct".to_string(),
+            ],
+            response: "INBOX||10||2\nArchive||50||0".to_string(),
+        });
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_list_mailboxes();
+                let mut args = HashMap::new();
+                args.insert("account".to_string(), json!("Personal"));
+                let result = handler(args).await.unwrap();
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert!(content.contains("INBOX"));
+                assert!(content.contains("Archive"));
+                assert!(content.contains("10"));
+                assert!(content.contains("2"));
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_mail_search_messages() {
+        let mock = Arc::new(AssertingMailMock {
+            expected_fragments: vec![
+                "mailbox \"INBOX\"".to_string(),
+                "subject contains \"Hello\"".to_string(),
+            ],
+            response: "1||Hello||Alice||2024-01-01||false\n2||Meeting||Bob||2024-01-02||true"
+                .to_string(),
+        });
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_search_messages();
+                let mut args = HashMap::new();
+                args.insert("subject".to_string(), json!("Hello"));
+                args.insert("mailbox".to_string(), json!("INBOX"));
+                let result = handler(args).await.unwrap();
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert!(content.contains("Hello"));
+                assert!(content.contains("Alice"));
+                // Second message is returned by mock but would be filtered by handler if we used query arg
+                assert!(content.contains("Meeting"));
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_mail_get_messages() {
+        let mock = Arc::new(AssertingMailMock {
+            expected_fragments: vec![
+                "mailbox \"INBOX\"".to_string(),
+                "subject contains \"Meeting\"".to_string()
+            ],
+            response: "==MSG_START==\nid:1\nsubject:Meeting\nsender:Alice\nto:Bob\ncc:\ndate:2024-01-01\nread:false\nbody:Let's meet at 5.\n==MSG_END==".to_string(),
+        });
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_get_messages();
+                let mut args = HashMap::new();
+                args.insert("subject".to_string(), json!("Meeting"));
+                let result = handler(args).await.unwrap();
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert!(content.contains("Meeting"));
+                assert!(content.contains("Let's meet at 5."));
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_mail_get_thread() {
+        let mock = Arc::new(AssertingMailMock {
+            expected_fragments: vec![
+                "every mailbox of acct".to_string(),
+                "subject contains \"Meeting\"".to_string()
+            ],
+            response: "==MSG_START==\nsubject:Re: Meeting\nsender:Bob\ndate:2024-01-02\nread:true\nmailbox:INBOX\nbody:Sounds good.\n==MSG_END==".to_string(),
+        });
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_get_thread();
+                let mut args = HashMap::new();
+                args.insert("subject".to_string(), json!("Meeting"));
+                let result = handler(args).await.unwrap();
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert!(content.contains("Re: Meeting"));
+                assert!(content.contains("Sounds good."));
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_mail_compose_message() {
+        let mock = Arc::new(AssertingMailMock {
+            expected_fragments: vec![
+                "subject:\"Test Subject\"".to_string(),
+                "content:\"Test Body\"".to_string(),
+                "address:\"test@example.com\"".to_string(),
+            ],
+            response: "Message composed: Test Subject".to_string(),
+        });
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_compose_message();
+                let mut args = HashMap::new();
+                args.insert("to".to_string(), json!("test@example.com"));
+                args.insert("subject".to_string(), json!("Test Subject"));
+                args.insert("body".to_string(), json!("Test Body"));
+                let result = handler(args).await.unwrap();
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert!(content.contains("Message composed"));
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_mail_compose_message_escaping() {
+        let mock = Arc::new(AssertingMailMock {
+            expected_fragments: vec![
+                "subject:\"Subject with \\\"quotes\\\" and \\\\backslash\"".to_string(),
+                "content:\"Body with \\\"quotes\\\" and \\\\backslash\"".to_string(),
+            ],
+            response: "Message composed: Subject with \"quotes\" and \\backslash".to_string(),
+        });
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_compose_message();
+                let mut args = HashMap::new();
+                args.insert("to".to_string(), json!("test@example.com"));
+                args.insert(
+                    "subject".to_string(),
+                    json!("Subject with \"quotes\" and \\backslash"),
+                );
+                args.insert(
+                    "body".to_string(),
+                    json!("Body with \"quotes\" and \\backslash"),
+                );
+                let result = handler(args).await.unwrap();
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert!(content.contains("Message composed"));
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_mail_reply_message() {
+        let mock = Arc::new(AssertingMailMock {
+            expected_fragments: vec![
+                "reply msg with opening window".to_string(),
+                "subject contains \"Hello\"".to_string(),
+            ],
+            response: "Reply window opened for: Hello".to_string(),
+        });
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_reply_message();
+                let mut args = HashMap::new();
+                args.insert("subject".to_string(), json!("Hello"));
+                args.insert("reply_text".to_string(), json!("I'm replying."));
+                let result = handler(args).await.unwrap();
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert!(content.contains("Reply window opened"));
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_mail_forward_message() {
+        let mock = Arc::new(AssertingMailMock {
+            expected_fragments: vec![
+                "forward msg with opening window".to_string(),
+                "address:\"friend@example.com\"".to_string(),
+            ],
+            response: "Forward window opened for: Hello".to_string(),
+        });
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_forward_message();
+                let mut args = HashMap::new();
+                args.insert("subject".to_string(), json!("Hello"));
+                args.insert("to".to_string(), json!("friend@example.com"));
+                let result = handler(args).await.unwrap();
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert!(content.contains("Forward window opened"));
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_mail_update_read_state() {
+        let mock = Arc::new(AssertingMailMock {
+            expected_fragments: vec![
+                "set read status of msg to true".to_string(),
+                "subject contains \"Hello\"".to_string(),
+            ],
+            response: "Marked 1 message(s) as read".to_string(),
+        });
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_update_read_state();
+                let mut args = HashMap::new();
+                args.insert("subject".to_string(), json!("Hello"));
+                args.insert("read".to_string(), json!(true));
+                let result = handler(args).await.unwrap();
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert!(content.contains("Marked 1 message(s) as read"));
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_mail_move_message() {
+        let mock = Arc::new(AssertingMailMock {
+            expected_fragments: vec![
+                "set mailbox of msg to mailbox \"Archive\"".to_string(),
+                "subject contains \"Hello\"".to_string(),
+            ],
+            response: "Message moved to Archive: Hello".to_string(),
+        });
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_move_message();
+                let mut args = HashMap::new();
+                args.insert("subject".to_string(), json!("Hello"));
+                args.insert("target_mailbox".to_string(), json!("Archive"));
+                let result = handler(args).await.unwrap();
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert!(content.contains("Message moved to Archive"));
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_mail_delete_message() {
+        let mock = Arc::new(AssertingMailMock {
+            expected_fragments: vec![
+                "delete msg".to_string(),
+                "subject contains \"Hello\"".to_string(),
+            ],
+            response: "Message deleted (moved to Trash): Hello".to_string(),
+        });
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_delete_message();
+                let mut args = HashMap::new();
+                args.insert("subject".to_string(), json!("Hello"));
+                let result = handler(args).await.unwrap();
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert!(content.contains("Message deleted"));
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_mail_open_message() {
+        let mock = Arc::new(AssertingMailMock {
+            expected_fragments: vec![
+                "open msg".to_string(),
+                "subject contains \"Hello\"".to_string(),
+            ],
+            response: "Opened message in Mail.app: Hello".to_string(),
+        });
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_open_message();
+                let mut args = HashMap::new();
+                args.insert("subject".to_string(), json!("Hello"));
+                let result = handler(args).await.unwrap();
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert!(content.contains("Opened message"));
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_mail_get_attachment() {
+        let mock = Arc::new(AssertingMailMock {
+            expected_fragments: vec![
+                "every mail attachment of msg".to_string(),
+                "subject contains \"Hello\"".to_string(),
+            ],
+            response: "image.png||image/png||1024".to_string(),
+        });
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_get_attachment();
+                let mut args = HashMap::new();
+                args.insert("subject".to_string(), json!("Hello"));
+                let result = handler(args).await.unwrap();
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert!(content.contains("image.png"));
+                assert!(content.contains("image/png"));
+            })
+            .await;
+    }
+
+    /// When osascript fails, compose_message must return a graceful error
+    /// result instead of panicking or propagating a raw anyhow error.
+    #[tokio::test]
+    async fn test_compose_message_returns_error_result_on_osascript_failure() {
+        struct ErrorMock;
+        impl ScriptRunner for ErrorMock {
+            fn run_applescript(&self, _script: &str) -> anyhow::Result<String> {
+                Err(anyhow::anyhow!(
+                    "osascript: Mail got an error: Can't continue Mail"
+                ))
+            }
+            fn run_applescript_with_timeout(
+                &self,
+                _script: &str,
+                _timeout: Duration,
+            ) -> anyhow::Result<String> {
+                unimplemented!()
+            }
+            fn run_jxa(&self, _script: &str) -> anyhow::Result<String> {
+                unimplemented!()
+            }
+        }
+
+        let mock = Arc::new(ErrorMock);
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_compose_message();
+                let mut args = HashMap::new();
+                args.insert("to".to_string(), json!("test@example.com"));
+                args.insert("subject".to_string(), json!("Hello"));
+                args.insert("body".to_string(), json!("Hi"));
+
+                let result = handler(args)
+                    .await
+                    .expect("Handler should not panic on osascript error");
+                assert_eq!(result.is_error, Some(true));
+
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert!(
+                    content.to_lowercase().contains("fail")
+                        || content.to_lowercase().contains("error"),
+                    "Expected a human-readable error, got: {}",
+                    content
+                );
+                assert!(
+                    content.contains("Can't continue Mail"),
+                    "Expected underlying error to be surfaced, got: {}",
+                    content
+                );
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_validation_compose_message_requires_to() {
+        let handler = handler_compose_message();
+        let mut args = HashMap::new();
+        args.insert("subject".to_string(), json!("Subj"));
+
+        let result = handler(args).await.expect("Handler should not panic");
+        assert_eq!(result.is_error, Some(true));
+        assert!(
+            result.content[0]
+                .as_text()
+                .unwrap()
+                .text
+                .contains("to is required")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_validation_get_attachment_requires_subject() {
+        let handler = handler_get_attachment();
+        let args = HashMap::new();
+
+        let result = handler(args).await.expect("Handler should not panic");
+        assert_eq!(result.is_error, Some(true));
+        assert!(
+            result.content[0]
+                .as_text()
+                .unwrap()
+                .text
+                .contains("subject is required")
+        );
     }
 }

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use rmcp::model::Tool;
 use serde_json::json;
 
-use crate::registry::{error_result, schema_from_json, text_result, ServiceRegistry, ToolHandler};
+use crate::registry::{ServiceRegistry, ToolHandler, error_result, schema_from_json, text_result};
 
 /// Register all location tools with the service registry.
 pub fn register(registry: &mut ServiceRegistry) {
@@ -106,8 +106,7 @@ if let loc = delegate.location {
                     "accuracy_meters": parts[2].trim().parse::<f64>().unwrap_or(-1.0),
                 });
                 Ok(text_result(
-                    serde_json::to_string_pretty(&result)
-                        .unwrap_or_else(|_| trimmed.to_string()),
+                    serde_json::to_string_pretty(&result).unwrap_or_else(|_| trimmed.to_string()),
                 ))
             } else {
                 Ok(error_result(format!(
@@ -131,5 +130,41 @@ mod tests {
 
         let names: Vec<_> = tools.iter().map(|t| t.name.as_ref()).collect();
         assert!(names.contains(&"location_get_current"));
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn test_location_get_current() {
+        let handler = handler_get_current();
+        let args = std::collections::HashMap::new();
+
+        let result = handler(args).await.unwrap();
+
+        if let Some(is_error) = result.is_error {
+            let content = result.content[0].as_text().unwrap().text.as_str();
+            if is_error {
+                assert!(
+                    content.contains("ERROR:")
+                        || content.contains("Failed")
+                        || content.contains("Could not get location")
+                );
+            } else {
+                let parsed: serde_json::Value =
+                    serde_json::from_str(content).expect("Should be valid JSON");
+                assert!(parsed.get("latitude").is_some());
+                assert!(parsed.get("longitude").is_some());
+                assert!(parsed.get("accuracy_meters").is_some());
+            }
+        } else {
+            // is_error should be returned as Some(bool) according to standard behavior
+            // Let's verify content nonetheless.
+            let content = result.content[0].as_text().unwrap().text.as_str();
+            let parsed: Result<serde_json::Value, _> = serde_json::from_str(content);
+            if let Ok(parsed) = parsed {
+                assert!(parsed.get("latitude").is_some());
+            } else {
+                assert!(content.contains("ERROR:") || content.contains("Failed"));
+            }
+        }
     }
 }

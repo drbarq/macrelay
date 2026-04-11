@@ -3,7 +3,7 @@ use std::sync::Arc;
 use rmcp::model::Tool;
 use serde_json::json;
 
-use crate::registry::{error_result, schema_from_json, text_result, ServiceRegistry, ToolHandler};
+use crate::registry::{ServiceRegistry, ToolHandler, error_result, schema_from_json, text_result};
 
 /// Register all maps tools with the service registry.
 pub fn register(registry: &mut ServiceRegistry) {
@@ -129,10 +129,10 @@ fn url_encode(s: &str) -> String {
 fn handler_search_places() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
-            let query = args
-                .get("query")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("query is required"))?;
+            let query = match args.get("query").and_then(|v| v.as_str()) {
+                Some(q) => q,
+                None => return Ok(error_result("query is required")),
+            };
 
             let encoded_query = url_encode(query);
             let script = format!(
@@ -152,15 +152,15 @@ return "Opened Apple Maps with search: {}"#,
 fn handler_get_directions() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
-            let origin = args
-                .get("origin")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("origin is required"))?;
+            let origin = match args.get("origin").and_then(|v| v.as_str()) {
+                Some(o) => o,
+                None => return Ok(error_result("origin is required")),
+            };
 
-            let destination = args
-                .get("destination")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("destination is required"))?;
+            let destination = match args.get("destination").and_then(|v| v.as_str()) {
+                Some(d) => d,
+                None => return Ok(error_result("destination is required")),
+            };
 
             let transport_type = args
                 .get("transport_type")
@@ -196,15 +196,12 @@ return "Opened Apple Maps with {} directions from {} to {}"#,
 fn handler_explore_places() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
-            let category = args
-                .get("category")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("category is required"))?;
+            let category = match args.get("category").and_then(|v| v.as_str()) {
+                Some(c) => c,
+                None => return Ok(error_result("category is required")),
+            };
 
-            let additional_query = args
-                .get("query")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
+            let additional_query = args.get("query").and_then(|v| v.as_str()).unwrap_or("");
 
             // Combine category with optional query for more refined search
             let search_term = if additional_query.is_empty() {
@@ -232,15 +229,15 @@ return "Opened Apple Maps exploring nearby: {}"#,
 fn handler_calculate_eta() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
-            let origin = args
-                .get("origin")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("origin is required"))?;
+            let origin = match args.get("origin").and_then(|v| v.as_str()) {
+                Some(o) => o,
+                None => return Ok(error_result("origin is required")),
+            };
 
-            let destination = args
-                .get("destination")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("destination is required"))?;
+            let destination = match args.get("destination").and_then(|v| v.as_str()) {
+                Some(d) => d,
+                None => return Ok(error_result("destination is required")),
+            };
 
             let encoded_origin = url_encode(origin);
             let encoded_dest = url_encode(destination);
@@ -291,5 +288,276 @@ mod tests {
         assert_eq!(url_encode("a=b"), "a%3Db");
         assert_eq!(url_encode("foo+bar"), "foo%2Bbar");
         assert_eq!(url_encode("hash#tag"), "hash%23tag");
+    }
+
+    #[tokio::test]
+    async fn test_mock_map_search_places() {
+        use crate::macos::applescript::{MOCK_RUNNER, ScriptRunner};
+        use std::sync::Arc;
+        use std::time::Duration;
+
+        struct MockSearch;
+        impl ScriptRunner for MockSearch {
+            fn run_applescript(&self, script: &str) -> anyhow::Result<String> {
+                assert!(script.contains("maps://?q=coffee%20shops"));
+                Ok("Opened Apple Maps with search: coffee shops".to_string())
+            }
+            fn run_applescript_with_timeout(
+                &self,
+                _script: &str,
+                _timeout: Duration,
+            ) -> anyhow::Result<String> {
+                unimplemented!()
+            }
+            fn run_jxa(&self, _script: &str) -> anyhow::Result<String> {
+                unimplemented!()
+            }
+        }
+
+        let mock = Arc::new(MockSearch);
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_search_places();
+                let mut args = std::collections::HashMap::new();
+                args.insert(
+                    "query".to_string(),
+                    serde_json::Value::String("coffee shops".to_string()),
+                );
+
+                let result = handler(args).await.unwrap();
+                assert_eq!(result.is_error, Some(false));
+
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert!(content.contains("Opened Apple Maps with search"));
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_mock_map_get_directions() {
+        use crate::macos::applescript::{MOCK_RUNNER, ScriptRunner};
+        use std::sync::Arc;
+        use std::time::Duration;
+
+        struct MockDirections;
+        impl ScriptRunner for MockDirections {
+            fn run_applescript(&self, script: &str) -> anyhow::Result<String> {
+                assert!(script.contains("maps://?saddr=Home&daddr=Work&dirflg=d"));
+                Ok("Opened Apple Maps with driving directions from Home to Work".to_string())
+            }
+            fn run_applescript_with_timeout(
+                &self,
+                _script: &str,
+                _timeout: Duration,
+            ) -> anyhow::Result<String> {
+                unimplemented!()
+            }
+            fn run_jxa(&self, _script: &str) -> anyhow::Result<String> {
+                unimplemented!()
+            }
+        }
+
+        let mock = Arc::new(MockDirections);
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_get_directions();
+                let mut args = std::collections::HashMap::new();
+                args.insert(
+                    "origin".to_string(),
+                    serde_json::Value::String("Home".to_string()),
+                );
+                args.insert(
+                    "destination".to_string(),
+                    serde_json::Value::String("Work".to_string()),
+                );
+
+                let result = handler(args).await.unwrap();
+                assert_eq!(result.is_error, Some(false));
+
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert!(content.contains("directions from Home to Work"));
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_mock_map_explore_places() {
+        use crate::macos::applescript::{MOCK_RUNNER, ScriptRunner};
+        use std::sync::Arc;
+        use std::time::Duration;
+
+        struct MockExplore;
+        impl ScriptRunner for MockExplore {
+            fn run_applescript(&self, script: &str) -> anyhow::Result<String> {
+                assert!(script.contains("maps://?q=Italian%20restaurant"));
+                Ok("Opened Apple Maps exploring nearby: Italian restaurant".to_string())
+            }
+            fn run_applescript_with_timeout(
+                &self,
+                _script: &str,
+                _timeout: Duration,
+            ) -> anyhow::Result<String> {
+                unimplemented!()
+            }
+            fn run_jxa(&self, _script: &str) -> anyhow::Result<String> {
+                unimplemented!()
+            }
+        }
+
+        let mock = Arc::new(MockExplore);
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_explore_places();
+                let mut args = std::collections::HashMap::new();
+                args.insert(
+                    "category".to_string(),
+                    serde_json::Value::String("restaurant".to_string()),
+                );
+                args.insert(
+                    "query".to_string(),
+                    serde_json::Value::String("Italian".to_string()),
+                );
+
+                let result = handler(args).await.unwrap();
+                assert_eq!(result.is_error, Some(false));
+
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert!(content.contains("exploring nearby: Italian restaurant"));
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_mock_map_calculate_eta() {
+        use crate::macos::applescript::{MOCK_RUNNER, ScriptRunner};
+        use std::sync::Arc;
+        use std::time::Duration;
+
+        struct MockEta;
+        impl ScriptRunner for MockEta {
+            fn run_applescript(&self, script: &str) -> anyhow::Result<String> {
+                assert!(script.contains("maps://?saddr=Home&daddr=Work&dirflg=d"));
+                Ok("Opened Apple Maps with directions from Home to Work. The estimated travel time (ETA) is displayed in the Maps app.".to_string())
+            }
+            fn run_applescript_with_timeout(
+                &self,
+                _script: &str,
+                _timeout: Duration,
+            ) -> anyhow::Result<String> {
+                unimplemented!()
+            }
+            fn run_jxa(&self, _script: &str) -> anyhow::Result<String> {
+                unimplemented!()
+            }
+        }
+
+        let mock = Arc::new(MockEta);
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_calculate_eta();
+                let mut args = std::collections::HashMap::new();
+                args.insert(
+                    "origin".to_string(),
+                    serde_json::Value::String("Home".to_string()),
+                );
+                args.insert(
+                    "destination".to_string(),
+                    serde_json::Value::String("Work".to_string()),
+                );
+
+                let result = handler(args).await.unwrap();
+                assert_eq!(result.is_error, Some(false));
+
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert!(content.contains("estimated travel time (ETA)"));
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_mock_map_search_error() {
+        use crate::macos::applescript::{MOCK_RUNNER, ScriptRunner};
+        use std::sync::Arc;
+        use std::time::Duration;
+
+        struct ErrorMock;
+        impl ScriptRunner for ErrorMock {
+            fn run_applescript(&self, _script: &str) -> anyhow::Result<String> {
+                Err(anyhow::anyhow!(
+                    "osascript error: Can't get application \"Maps\""
+                ))
+            }
+            fn run_applescript_with_timeout(
+                &self,
+                _script: &str,
+                _timeout: Duration,
+            ) -> anyhow::Result<String> {
+                unimplemented!()
+            }
+            fn run_jxa(&self, _script: &str) -> anyhow::Result<String> {
+                unimplemented!()
+            }
+        }
+
+        let mock = Arc::new(ErrorMock);
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_search_places();
+                let mut args = std::collections::HashMap::new();
+                args.insert("query".to_string(), json!("Coffee"));
+
+                let result = handler(args).await.unwrap();
+                assert_eq!(result.is_error, Some(true));
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert!(content.contains("Can't get application"));
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_validation_search_places_requires_query() {
+        let handler = handler_search_places();
+        let args = std::collections::HashMap::new();
+
+        let result = handler(args).await.expect("Handler should not panic");
+        assert_eq!(result.is_error, Some(true));
+        assert!(
+            result.content[0]
+                .as_text()
+                .unwrap()
+                .text
+                .contains("query is required")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_validation_get_directions_requires_params() {
+        let handler = handler_get_directions();
+        let mut args = std::collections::HashMap::new();
+
+        // Missing both
+        let result = handler(args.clone())
+            .await
+            .expect("Handler should not panic");
+        assert_eq!(result.is_error, Some(true));
+        assert!(
+            result.content[0]
+                .as_text()
+                .unwrap()
+                .text
+                .contains("origin is required")
+        );
+
+        // Missing destination
+        args.insert("origin".to_string(), json!("Home"));
+        let result = handler(args).await.expect("Handler should not panic");
+        assert_eq!(result.is_error, Some(true));
+        assert!(
+            result.content[0]
+                .as_text()
+                .unwrap()
+                .text
+                .contains("destination is required")
+        );
     }
 }

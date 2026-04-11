@@ -3,7 +3,8 @@ use std::sync::Arc;
 use rmcp::model::Tool;
 use serde_json::json;
 
-use crate::registry::{error_result, schema_from_json, text_result, ServiceRegistry, ToolHandler};
+use crate::macos::escape::{escape_applescript_string, escape_shell_single_quoted};
+use crate::registry::{ServiceRegistry, ToolHandler, error_result, schema_from_json, text_result};
 
 /// Register all shortcuts tools with the service registry.
 pub fn register(registry: &mut ServiceRegistry) {
@@ -78,7 +79,10 @@ fn handler_shortcuts_list() -> ToolHandler {
             let folder = args.get("folder").and_then(|v| v.as_str());
 
             let script = if let Some(f) = folder {
-                let escaped = f.replace('\'', "'\\''");
+                // User input is embedded inside `do shell script "..."`, so it must be
+                // escaped for BOTH layers: shell single-quoting first, then AppleScript
+                // string-literal escaping on the result.
+                let escaped = escape_applescript_string(&escape_shell_single_quoted(f));
                 format!(
                     r#"do shell script "/usr/bin/shortcuts list --folder-name '{}' 2>&1""#,
                     escaped
@@ -109,12 +113,12 @@ fn handler_shortcuts_list() -> ToolHandler {
 fn handler_shortcuts_get() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
-            let name = args
-                .get("name")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("name is required"))?;
+            let name = match args.get("name").and_then(|v| v.as_str()) {
+                Some(n) => n,
+                None => return Ok(error_result("name is required")),
+            };
 
-            let escaped_name = name.replace('\'', "'\\''");
+            let escaped_name = escape_applescript_string(&escape_shell_single_quoted(name));
 
             // `|| true` keeps exit 0 when grep finds no matches, so a missing
             // shortcut returns empty output instead of bubbling up as an error.
@@ -125,14 +129,9 @@ fn handler_shortcuts_get() -> ToolHandler {
             match crate::macos::applescript::run_applescript(&script) {
                 Ok(output) => {
                     if output.trim().is_empty() {
-                        Ok(text_result(format!(
-                            "No shortcut found matching: {name}"
-                        )))
+                        Ok(text_result(format!("No shortcut found matching: {name}")))
                     } else {
-                        Ok(text_result(format!(
-                            "Shortcut found: {}",
-                            output.trim()
-                        )))
+                        Ok(text_result(format!("Shortcut found: {}", output.trim())))
                     }
                 }
                 Err(e) => Ok(error_result(format!("Failed to get shortcut: {e}"))),
@@ -144,10 +143,10 @@ fn handler_shortcuts_get() -> ToolHandler {
 fn handler_shortcuts_run() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
-            let name = args
-                .get("name")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("name is required"))?;
+            let name = match args.get("name").and_then(|v| v.as_str()) {
+                Some(n) => n,
+                None => return Ok(error_result("name is required")),
+            };
 
             let input = args.get("input").and_then(|v| v.as_str());
             let timeout_secs = args
@@ -155,10 +154,11 @@ fn handler_shortcuts_run() -> ToolHandler {
                 .and_then(|v| v.as_u64())
                 .unwrap_or(30);
 
-            let escaped_name = name.replace('\'', "'\\''");
+            let escaped_name = escape_applescript_string(&escape_shell_single_quoted(name));
 
             let script = if let Some(input_text) = input {
-                let escaped_input = input_text.replace('\'', "'\\''");
+                let escaped_input =
+                    escape_applescript_string(&escape_shell_single_quoted(input_text));
                 format!(
                     r#"do shell script "echo '{}' | /usr/bin/shortcuts run '{}' 2>&1""#,
                     escaped_input, escaped_name
@@ -210,5 +210,173 @@ mod tests {
         assert!(names.contains(&"shortcuts_list"));
         assert!(names.contains(&"shortcuts_get"));
         assert!(names.contains(&"shortcuts_run"));
+    }
+
+    #[tokio::test]
+    async fn test_mock_shortcuts_list() {
+        use crate::macos::applescript::{MOCK_RUNNER, ScriptRunner};
+        use std::sync::Arc;
+        use std::time::Duration;
+
+        struct MockShortcuts;
+        impl ScriptRunner for MockShortcuts {
+            fn run_applescript(&self, script: &str) -> anyhow::Result<String> {
+                assert!(script.contains("shortcuts list"));
+                Ok("My Shortcut 1\nMy Shortcut 2".to_string())
+            }
+            fn run_applescript_with_timeout(
+                &self,
+                _script: &str,
+                _timeout: Duration,
+            ) -> anyhow::Result<String> {
+                unimplemented!()
+            }
+            fn run_jxa(&self, _script: &str) -> anyhow::Result<String> {
+                unimplemented!()
+            }
+        }
+
+        let mock = Arc::new(MockShortcuts);
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_shortcuts_list();
+                let args = std::collections::HashMap::new();
+
+                let result = handler(args).await.unwrap();
+                assert_eq!(result.is_error, Some(false));
+
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert!(content.contains("Found 2 shortcut(s):"));
+                assert!(content.contains("My Shortcut 1"));
+                assert!(content.contains("My Shortcut 2"));
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_mock_shortcuts_get() {
+        use crate::macos::applescript::{MOCK_RUNNER, ScriptRunner};
+        use std::sync::Arc;
+        use std::time::Duration;
+
+        struct MockShortcuts;
+        impl ScriptRunner for MockShortcuts {
+            fn run_applescript(&self, script: &str) -> anyhow::Result<String> {
+                assert!(script.contains("grep -i 'My Shortcut'"));
+                Ok("My Shortcut".to_string())
+            }
+            fn run_applescript_with_timeout(
+                &self,
+                _script: &str,
+                _timeout: Duration,
+            ) -> anyhow::Result<String> {
+                unimplemented!()
+            }
+            fn run_jxa(&self, _script: &str) -> anyhow::Result<String> {
+                unimplemented!()
+            }
+        }
+
+        let mock = Arc::new(MockShortcuts);
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_shortcuts_get();
+                let mut args = std::collections::HashMap::new();
+                args.insert(
+                    "name".to_string(),
+                    serde_json::Value::String("My Shortcut".to_string()),
+                );
+
+                let result = handler(args).await.unwrap();
+                assert_eq!(result.is_error, Some(false));
+
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert!(content.contains("Shortcut found: My Shortcut"));
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_mock_shortcuts_run() {
+        use crate::macos::applescript::{MOCK_RUNNER, ScriptRunner};
+        use std::sync::Arc;
+        use std::time::Duration;
+
+        struct MockShortcuts;
+        impl ScriptRunner for MockShortcuts {
+            fn run_applescript(&self, _script: &str) -> anyhow::Result<String> {
+                unimplemented!()
+            }
+            fn run_applescript_with_timeout(
+                &self,
+                script: &str,
+                _timeout: Duration,
+            ) -> anyhow::Result<String> {
+                assert!(script.contains("shortcuts run 'My Shortcut'"));
+                Ok("Shortcut output data".to_string())
+            }
+            fn run_jxa(&self, _script: &str) -> anyhow::Result<String> {
+                unimplemented!()
+            }
+        }
+
+        let mock = Arc::new(MockShortcuts);
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_shortcuts_run();
+                let mut args = std::collections::HashMap::new();
+                args.insert(
+                    "name".to_string(),
+                    serde_json::Value::String("My Shortcut".to_string()),
+                );
+
+                let result = handler(args).await.unwrap();
+                assert_eq!(result.is_error, Some(false));
+
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert!(content.contains("Shortcut 'My Shortcut' output:"));
+                assert!(content.contains("Shortcut output data"));
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_mock_shortcuts_run_error() {
+        use crate::macos::applescript::{MOCK_RUNNER, ScriptRunner};
+        use std::sync::Arc;
+        use std::time::Duration;
+
+        struct ErrorMock;
+        impl ScriptRunner for ErrorMock {
+            fn run_applescript(&self, _script: &str) -> anyhow::Result<String> {
+                unimplemented!()
+            }
+            fn run_applescript_with_timeout(
+                &self,
+                _script: &str,
+                _timeout: Duration,
+            ) -> anyhow::Result<String> {
+                Err(anyhow::anyhow!(
+                    "osascript error: The shortcut was not found"
+                ))
+            }
+            fn run_jxa(&self, _script: &str) -> anyhow::Result<String> {
+                unimplemented!()
+            }
+        }
+
+        let mock = Arc::new(ErrorMock);
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_shortcuts_run();
+                let mut args = std::collections::HashMap::new();
+                args.insert("name".to_string(), json!("Invalid"));
+
+                let result = handler(args).await.unwrap();
+                assert_eq!(result.is_error, Some(true));
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert!(content.contains("Failed to run shortcut"));
+            })
+            .await;
     }
 }

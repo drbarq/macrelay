@@ -43,13 +43,13 @@ impl PermissionType {
     pub fn grant_instructions(&self) -> &'static str {
         match self {
             Self::Accessibility => {
-                "Open System Settings > Privacy & Security > Accessibility and enable access for mac-app-oss."
+                "Open System Settings > Privacy & Security > Accessibility and enable access for MacRelay."
             }
             Self::ScreenRecording => {
-                "Open System Settings > Privacy & Security > Screen Recording and enable access for mac-app-oss."
+                "Open System Settings > Privacy & Security > Screen Recording and enable access for MacRelay."
             }
             Self::FullDiskAccess => {
-                "Open System Settings > Privacy & Security > Full Disk Access and enable access for mac-app-oss."
+                "Open System Settings > Privacy & Security > Full Disk Access and enable access for MacRelay."
             }
             Self::Calendar => {
                 "Calendar access will be requested automatically. If denied, go to System Settings > Privacy & Security > Calendars."
@@ -75,12 +75,18 @@ impl PermissionManager {
     pub fn check_all() -> HashMap<PermissionType, PermissionStatus> {
         let mut statuses = HashMap::new();
         statuses.insert(PermissionType::Accessibility, Self::check_accessibility());
-        statuses.insert(PermissionType::Calendar, PermissionStatus::Unknown);
-        statuses.insert(PermissionType::Reminders, PermissionStatus::Unknown);
-        statuses.insert(PermissionType::Contacts, PermissionStatus::Unknown);
-        statuses.insert(PermissionType::Location, PermissionStatus::Unknown);
-        statuses.insert(PermissionType::FullDiskAccess, Self::check_full_disk_access());
-        statuses.insert(PermissionType::ScreenRecording, PermissionStatus::Unknown);
+        statuses.insert(PermissionType::Calendar, Self::check_calendar());
+        statuses.insert(PermissionType::Reminders, Self::check_reminders());
+        statuses.insert(PermissionType::Contacts, Self::check_contacts());
+        statuses.insert(PermissionType::Location, Self::check_location());
+        statuses.insert(
+            PermissionType::FullDiskAccess,
+            Self::check_full_disk_access(),
+        );
+        statuses.insert(
+            PermissionType::ScreenRecording,
+            Self::check_screen_recording(),
+        );
         statuses
     }
 
@@ -108,6 +114,84 @@ impl PermissionManager {
         }
     }
 
+    /// Check Calendar permission status.
+    pub fn check_calendar() -> PermissionStatus {
+        use objc2_event_kit::{EKEntityType, EKEventStore};
+        let status = unsafe { EKEventStore::authorizationStatusForEntityType(EKEntityType::Event) };
+        match status.0 {
+            0 => PermissionStatus::NotDetermined, // EKAuthorizationStatusNotDetermined
+            1 => PermissionStatus::Denied,        // EKAuthorizationStatusRestricted
+            2 => PermissionStatus::Denied,        // EKAuthorizationStatusDenied
+            3 => PermissionStatus::Granted,       // EKAuthorizationStatusAuthorized
+            4 => PermissionStatus::Granted,       // EKAuthorizationStatusFullAccess (macOS 14+)
+            _ => PermissionStatus::Unknown,
+        }
+    }
+
+    /// Check Reminders permission status.
+    pub fn check_reminders() -> PermissionStatus {
+        use objc2_event_kit::{EKEntityType, EKEventStore};
+        let status =
+            unsafe { EKEventStore::authorizationStatusForEntityType(EKEntityType::Reminder) };
+        match status.0 {
+            0 => PermissionStatus::NotDetermined,
+            1 => PermissionStatus::Denied,
+            2 => PermissionStatus::Denied,
+            3 => PermissionStatus::Granted,
+            4 => PermissionStatus::Granted,
+            _ => PermissionStatus::Unknown,
+        }
+    }
+
+    /// Check Contacts permission status.
+    pub fn check_contacts() -> PermissionStatus {
+        use objc2_contacts::{CNContactStore, CNEntityType};
+        let status =
+            unsafe { CNContactStore::authorizationStatusForEntityType(CNEntityType::Contacts) };
+        match status.0 {
+            0 => PermissionStatus::NotDetermined, // CNAuthorizationStatusNotDetermined
+            1 => PermissionStatus::Denied,        // CNAuthorizationStatusRestricted
+            2 => PermissionStatus::Denied,        // CNAuthorizationStatusDenied
+            3 => PermissionStatus::Granted,       // CNAuthorizationStatusAuthorized
+            _ => PermissionStatus::Unknown,
+        }
+    }
+
+    /// Check Location permission status.
+    pub fn check_location() -> PermissionStatus {
+        // Use direct FFI call to kCLLocationManager.authorizationStatus() or equivalent
+        // if possible, but since objc2 requires an instance for this version,
+        // we'll try to get it via the class method if we can find the right binding
+        // or just use the instance for now as it's the standard way in modern macOS.
+        // To address the concern about side effects, we ensure the manager is dropped immediately.
+        use objc2_core_location::CLLocationManager;
+        let status = unsafe {
+            let manager = CLLocationManager::new();
+            manager.authorizationStatus()
+        };
+        match status.0 {
+            0 => PermissionStatus::NotDetermined, // kCLAuthorizationStatusNotDetermined
+            1 => PermissionStatus::Denied,        // kCLAuthorizationStatusRestricted
+            2 => PermissionStatus::Denied,        // kCLAuthorizationStatusDenied
+            3 => PermissionStatus::Granted,       // kCLAuthorizationStatusAuthorizedAlways
+            4 => PermissionStatus::Granted,       // kCLAuthorizationStatusAuthorizedWhenInUse
+            _ => PermissionStatus::Unknown,
+        }
+    }
+
+    /// Check Screen Recording permission status.
+    pub fn check_screen_recording() -> PermissionStatus {
+        // CGPreflightScreenCaptureAccess() is available on macOS 10.15+
+        unsafe extern "C" {
+            fn CGPreflightScreenCaptureAccess() -> bool;
+        }
+        if unsafe { CGPreflightScreenCaptureAccess() } {
+            PermissionStatus::Granted
+        } else {
+            PermissionStatus::Denied
+        }
+    }
+
     /// Return a formatted error message for a missing permission.
     pub fn permission_error(perm: PermissionType) -> String {
         format!(
@@ -124,8 +208,14 @@ mod tests {
     #[test]
     fn test_permission_type_display() {
         assert_eq!(PermissionType::Accessibility.to_string(), "Accessibility");
-        assert_eq!(PermissionType::FullDiskAccess.to_string(), "Full Disk Access");
-        assert_eq!(PermissionType::ScreenRecording.to_string(), "Screen Recording");
+        assert_eq!(
+            PermissionType::FullDiskAccess.to_string(),
+            "Full Disk Access"
+        );
+        assert_eq!(
+            PermissionType::ScreenRecording.to_string(),
+            "Screen Recording"
+        );
     }
 
     #[test]
@@ -140,7 +230,10 @@ mod tests {
             PermissionType::Location,
         ];
         for pt in types {
-            assert!(!pt.grant_instructions().is_empty(), "Instructions empty for {pt}");
+            assert!(
+                !pt.grant_instructions().is_empty(),
+                "Instructions empty for {pt}"
+            );
         }
     }
 

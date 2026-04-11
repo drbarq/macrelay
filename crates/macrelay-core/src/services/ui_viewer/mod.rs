@@ -3,7 +3,8 @@ use std::sync::Arc;
 use rmcp::model::Tool;
 use serde_json::json;
 
-use crate::registry::{error_result, schema_from_json, text_result, ServiceRegistry, ToolHandler};
+use crate::macos::escape::{escape_applescript_string, escape_jxa_string};
+use crate::registry::{ServiceRegistry, ToolHandler, error_result, schema_from_json, text_result};
 
 /// Register all UI viewer tools with the service registry.
 pub fn register(registry: &mut ServiceRegistry) {
@@ -151,7 +152,10 @@ end tell
                         }
                     }
                     let json = serde_json::to_string_pretty(&lines)?;
-                    Ok(text_result(format!("Found {} running application(s):\n\n{json}", lines.len())))
+                    Ok(text_result(format!(
+                        "Found {} running application(s):\n\n{json}",
+                        lines.len()
+                    )))
                 }
                 Err(e) => Ok(error_result(format!("Failed to list applications: {e}"))),
             }
@@ -198,17 +202,14 @@ end tell
 fn handler_get_ui_tree() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
-            let app_name = args
-                .get("app_name")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("app_name is required"))?;
+            let app_name = match args.get("app_name").and_then(|v| v.as_str()) {
+                Some(name) => name,
+                None => return Ok(error_result("app_name is required")),
+            };
 
-            let max_depth = args
-                .get("max_depth")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(3);
+            let max_depth = args.get("max_depth").and_then(|v| v.as_u64()).unwrap_or(3);
 
-            let escaped_app = app_name.replace('\\', "\\\\").replace('\'', "\\'");
+            let escaped_app = escape_jxa_string(app_name);
 
             // Use JXA to walk the accessibility UI tree recursively.
             let script = format!(
@@ -269,7 +270,10 @@ output;
                 Ok(output) => {
                     let trimmed = output.trim();
                     if trimmed.is_empty() {
-                        Ok(text_result(format!("No UI elements found for application \"{}\".", app_name)))
+                        Ok(text_result(format!(
+                            "No UI elements found for application \"{}\".",
+                            app_name
+                        )))
                     } else {
                         Ok(text_result(format!(
                             "UI tree for \"{}\" (max depth {}):\n\n{}",
@@ -289,12 +293,12 @@ output;
 fn handler_get_visible_text() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
-            let app_name = args
-                .get("app_name")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("app_name is required"))?;
+            let app_name = match args.get("app_name").and_then(|v| v.as_str()) {
+                Some(name) => name,
+                None => return Ok(error_result("app_name is required")),
+            };
 
-            let escaped_app = app_name.replace('"', "\\\"");
+            let escaped_app = escape_applescript_string(app_name);
 
             let script = format!(
                 r#"
@@ -344,24 +348,24 @@ end tell
 fn handler_find_elements() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
-            let app_name = args
-                .get("app_name")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("app_name is required"))?;
+            let app_name = match args.get("app_name").and_then(|v| v.as_str()) {
+                Some(name) => name,
+                None => return Ok(error_result("app_name is required")),
+            };
 
             let role = args.get("role").and_then(|v| v.as_str());
             let title = args.get("title").and_then(|v| v.as_str());
 
-            let escaped_app = app_name.replace('"', "\\\"");
+            let escaped_app = escape_applescript_string(app_name);
 
             // Build the whose clause dynamically based on provided filters.
             let mut conditions = Vec::new();
             if let Some(r) = role {
-                let escaped_role = r.replace('"', "\\\"");
+                let escaped_role = escape_applescript_string(r);
                 conditions.push(format!(r#"role is "{escaped_role}""#));
             }
             if let Some(t) = title {
-                let escaped_title = t.replace('"', "\\\"");
+                let escaped_title = escape_applescript_string(t);
                 conditions.push(format!(r#"name contains "{escaped_title}""#));
             }
 
@@ -448,7 +452,7 @@ fn handler_capture_snapshot() -> ToolHandler {
 
             match app_name {
                 Some(name) => {
-                    let escaped_name = name.replace('"', "\\\"");
+                    let escaped_name = escape_applescript_string(name);
 
                     // First, get the window ID via AppleScript, then use screencapture.
                     // Wrap in try/on error so apps with no visible window get a
@@ -495,10 +499,8 @@ end tell
                 }
                 None => {
                     // Full screen capture
-                    let capture_script = format!(
-                        r#"do shell script "screencapture -o -x {}""#,
-                        output_path
-                    );
+                    let capture_script =
+                        format!(r#"do shell script "screencapture -o -x {}""#, output_path);
                     match crate::macos::applescript::run_applescript(&capture_script) {
                         Ok(_) => Ok(text_result(format!(
                             "Full screen screenshot saved to {}",
@@ -518,6 +520,11 @@ end tell
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::macos::applescript::{MOCK_RUNNER, ScriptRunner};
+    use std::collections::HashMap;
+    use std::sync::Arc;
+    use std::sync::Mutex;
+    use std::time::Duration;
 
     #[test]
     fn test_tool_schemas_valid() {
@@ -533,5 +540,279 @@ mod tests {
         assert!(names.contains(&"ui_viewer_get_visible_text"));
         assert!(names.contains(&"ui_viewer_find_elements"));
         assert!(names.contains(&"ui_viewer_capture_snapshot"));
+    }
+
+    struct AssertingMock {
+        applescript_expectations: Mutex<Vec<(String, String)>>,
+        jxa_expectations: Mutex<Vec<(String, String)>>,
+    }
+
+    impl AssertingMock {
+        fn new() -> Self {
+            Self {
+                applescript_expectations: Mutex::new(Vec::new()),
+                jxa_expectations: Mutex::new(Vec::new()),
+            }
+        }
+
+        fn expect_applescript(self, fragment: &str, response: &str) -> Self {
+            self.applescript_expectations
+                .lock()
+                .unwrap()
+                .push((fragment.to_string(), response.to_string()));
+            self
+        }
+
+        fn expect_jxa(self, fragment: &str, response: &str) -> Self {
+            self.jxa_expectations
+                .lock()
+                .unwrap()
+                .push((fragment.to_string(), response.to_string()));
+            self
+        }
+    }
+
+    impl ScriptRunner for AssertingMock {
+        fn run_applescript(&self, script: &str) -> anyhow::Result<String> {
+            let mut expectations = self.applescript_expectations.lock().unwrap();
+            if expectations.is_empty() {
+                panic!("Unexpected applescript call: {}", script);
+            }
+            let (expected_fragment, response) = expectations.remove(0);
+            assert!(
+                script.contains(&expected_fragment),
+                "script missing fragment {:?}:\n{}",
+                expected_fragment,
+                script
+            );
+            Ok(response)
+        }
+
+        fn run_applescript_with_timeout(
+            &self,
+            script: &str,
+            _timeout: Duration,
+        ) -> anyhow::Result<String> {
+            self.run_applescript(script)
+        }
+
+        fn run_jxa(&self, script: &str) -> anyhow::Result<String> {
+            let mut expectations = self.jxa_expectations.lock().unwrap();
+            if expectations.is_empty() {
+                panic!("Unexpected JXA call: {}", script);
+            }
+            let (expected_fragment, response) = expectations.remove(0);
+            assert!(
+                script.contains(&expected_fragment),
+                "JXA script missing fragment {:?}:\n{}",
+                expected_fragment,
+                script
+            );
+            Ok(response)
+        }
+    }
+
+    #[tokio::test]
+    async fn test_ui_viewer_list_apps() {
+        let mock = Arc::new(AssertingMock::new().expect_applescript(
+            "every process whose background only is false",
+            "Finder||123||com.apple.finder\nSafari||456||com.apple.Safari",
+        ));
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_list_apps();
+                let args = HashMap::new();
+                let result = handler(args).await.unwrap();
+
+                assert_eq!(result.is_error, Some(false));
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert!(content.contains("Found 2 running application(s)"));
+                assert!(content.contains("\"name\": \"Finder\""));
+                assert!(content.contains("\"pid\": \"123\""));
+                assert!(content.contains("\"bundle_id\": \"com.apple.finder\""));
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_ui_viewer_get_frontmost() {
+        let mock = Arc::new(AssertingMock::new().expect_applescript(
+            "first process whose frontmost is true",
+            "Safari||com.apple.Safari||Google Search",
+        ));
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_get_frontmost();
+                let args = HashMap::new();
+                let result = handler(args).await.unwrap();
+
+                assert_eq!(result.is_error, Some(false));
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert!(content.contains("\"app_name\": \"Safari\""));
+                assert!(content.contains("\"bundle_id\": \"com.apple.Safari\""));
+                assert!(content.contains("\"window_title\": \"Google Search\""));
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_ui_viewer_get_ui_tree() {
+        let mock = Arc::new(AssertingMock::new().expect_jxa(
+            "walkElement",
+            "[AXWindow] title=\"Main Window\"\n  [AXButton] title=\"Submit\"",
+        ));
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_get_ui_tree();
+                let mut args = HashMap::new();
+                args.insert("app_name".to_string(), json!("Safari"));
+
+                let result = handler(args).await.unwrap();
+
+                assert_eq!(result.is_error, Some(false));
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert!(content.contains("UI tree for \"Safari\""));
+                assert!(content.contains("[AXWindow] title=\"Main Window\""));
+                assert!(content.contains("[AXButton] title=\"Submit\""));
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_ui_viewer_get_visible_text() {
+        let mock = Arc::new(
+            AssertingMock::new()
+                .expect_applescript("tell process \"Safari\"", "Hello World\nSearch Results"),
+        );
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_get_visible_text();
+                let mut args = HashMap::new();
+                args.insert("app_name".to_string(), json!("Safari"));
+
+                let result = handler(args).await.unwrap();
+
+                assert_eq!(result.is_error, Some(false));
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert!(content.contains("Visible text from \"Safari\""));
+                assert!(content.contains("Hello World"));
+                assert!(content.contains("Search Results"));
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_ui_viewer_find_elements() {
+        let mock = Arc::new(
+            AssertingMock::new()
+                .expect_applescript("role is \"AXButton\"", "AXButton||Submit||Submit button"),
+        );
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_find_elements();
+                let mut args = HashMap::new();
+                args.insert("app_name".to_string(), json!("Safari"));
+                args.insert("role".to_string(), json!("AXButton"));
+
+                let result = handler(args).await.unwrap();
+
+                assert_eq!(result.is_error, Some(false));
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert!(content.contains("Found 1 element(s) in \"Safari\""));
+                assert!(content.contains("\"role\": \"AXButton\""));
+                assert!(content.contains("\"name\": \"Submit\""));
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_ui_viewer_capture_snapshot() {
+        let mock = Arc::new(
+            AssertingMock::new()
+                .expect_applescript("id of first window of process \"Safari\"", "123")
+                .expect_applescript("screencapture -l 123", ""),
+        );
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_capture_snapshot();
+
+                // Test app-specific capture
+                let mut args = HashMap::new();
+                args.insert("app_name".to_string(), json!("Safari"));
+                let result = handler(args).await.unwrap();
+                assert_eq!(result.is_error, Some(false));
+                assert!(
+                    result.content[0]
+                        .as_text()
+                        .unwrap()
+                        .text
+                        .contains("Screenshot of \"Safari\" saved to")
+                );
+            })
+            .await;
+
+        // Test full screen capture
+        let mock_full =
+            Arc::new(AssertingMock::new().expect_applescript("screencapture -o -x", ""));
+        MOCK_RUNNER
+            .scope(mock_full, async {
+                let handler = handler_capture_snapshot();
+                let args = HashMap::new();
+                let result = handler(args).await.unwrap();
+                assert_eq!(result.is_error, Some(false));
+                assert!(
+                    result.content[0]
+                        .as_text()
+                        .unwrap()
+                        .text
+                        .contains("Full screen screenshot saved to")
+                );
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_ui_viewer_list_apps_error() {
+        use crate::macos::applescript::{MOCK_RUNNER, ScriptRunner};
+        use std::sync::Arc;
+        use std::time::Duration;
+
+        struct ErrorMock;
+        impl ScriptRunner for ErrorMock {
+            fn run_applescript(&self, _script: &str) -> anyhow::Result<String> {
+                Err(anyhow::anyhow!(
+                    "osascript error: System Events got an error: Access is not allowed"
+                ))
+            }
+            fn run_applescript_with_timeout(
+                &self,
+                _script: &str,
+                _timeout: Duration,
+            ) -> anyhow::Result<String> {
+                unimplemented!()
+            }
+            fn run_jxa(&self, _script: &str) -> anyhow::Result<String> {
+                unimplemented!()
+            }
+        }
+
+        let mock = Arc::new(ErrorMock);
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_list_apps();
+                let args = HashMap::new();
+
+                let result = handler(args).await.unwrap();
+                assert_eq!(result.is_error, Some(true));
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert!(content.contains("Access is not allowed"));
+            })
+            .await;
     }
 }

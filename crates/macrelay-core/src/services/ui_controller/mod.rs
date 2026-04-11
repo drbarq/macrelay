@@ -3,7 +3,8 @@ use std::sync::Arc;
 use rmcp::model::Tool;
 use serde_json::json;
 
-use crate::registry::{error_result, schema_from_json, text_result, ServiceRegistry, ToolHandler};
+use crate::macos::escape::{escape_applescript_string, escape_shell_single_quoted};
+use crate::registry::{ServiceRegistry, ToolHandler, error_result, schema_from_json, text_result};
 
 /// Map common key names to macOS virtual key codes for use with `key code`.
 fn key_name_to_code(name: &str) -> Option<u8> {
@@ -363,9 +364,8 @@ fn handler_click() -> ToolHandler {
                 .and_then(|v| v.as_u64())
                 .unwrap_or(1);
 
-            let has_coords = args.get("x").is_some() && args.get("y").is_some();
-            let has_element =
-                args.get("app_name").is_some() && args.get("element_name").is_some();
+            let has_coords = args.contains_key("x") && args.contains_key("y");
+            let has_element = args.contains_key("app_name") && args.contains_key("element_name");
 
             if !has_coords && !has_element {
                 return Ok(error_result(
@@ -376,8 +376,8 @@ fn handler_click() -> ToolHandler {
             let script = if has_element {
                 let app_name = args["app_name"].as_str().unwrap();
                 let element_name = args["element_name"].as_str().unwrap();
-                let escaped_app = app_name.replace('"', "\\\"");
-                let escaped_el = element_name.replace('"', "\\\"");
+                let escaped_app = escape_applescript_string(app_name);
+                let escaped_el = escape_applescript_string(element_name);
 
                 if button == "right" {
                     // Simulate right-click via AXShowMenu accessibility action
@@ -476,16 +476,16 @@ fn handler_click() -> ToolHandler {
 fn handler_type_text() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
-            let text = args
-                .get("text")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("text is required"))?;
+            let text = match args.get("text").and_then(|v| v.as_str()) {
+                Some(t) => t,
+                None => return Ok(error_result("text is required")),
+            };
 
-            let escaped_text = text.replace('\\', "\\\\").replace('"', "\\\"");
+            let escaped_text = escape_applescript_string(text);
 
             let activate_block =
                 if let Some(app_name) = args.get("app_name").and_then(|v| v.as_str()) {
-                    let escaped_app = app_name.replace('"', "\\\"");
+                    let escaped_app = escape_applescript_string(app_name);
                     format!(
                         r#"
                 tell application "{escaped_app}" to activate
@@ -517,10 +517,10 @@ fn handler_type_text() -> ToolHandler {
 fn handler_press_key() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
-            let key = args
-                .get("key")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("key is required"))?;
+            let key = match args.get("key").and_then(|v| v.as_str()) {
+                Some(k) => k,
+                None => return Ok(error_result("key is required")),
+            };
 
             let modifiers: Vec<String> = args
                 .get("modifiers")
@@ -540,7 +540,7 @@ fn handler_press_key() -> ToolHandler {
 
             let activate_block =
                 if let Some(app_name) = args.get("app_name").and_then(|v| v.as_str()) {
-                    let escaped_app = app_name.replace('"', "\\\"");
+                    let escaped_app = escape_applescript_string(app_name);
                     format!(
                         r#"
                 tell application "{escaped_app}" to activate
@@ -556,7 +556,7 @@ fn handler_press_key() -> ToolHandler {
                 format!("key code {code}{using_clause}")
             } else {
                 // Single character or short string: use keystroke
-                let escaped_key = key.replace('\\', "\\\\").replace('"', "\\\"");
+                let escaped_key = escape_applescript_string(key);
                 format!("keystroke \"{escaped_key}\"{using_clause}")
             };
 
@@ -581,19 +581,16 @@ fn handler_press_key() -> ToolHandler {
 fn handler_scroll() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
-            let direction = args
-                .get("direction")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("direction is required"))?;
+            let direction = match args.get("direction").and_then(|v| v.as_str()) {
+                Some(d) => d,
+                None => return Ok(error_result("direction is required")),
+            };
 
-            let amount = args
-                .get("amount")
-                .and_then(|v| v.as_i64())
-                .unwrap_or(3);
+            let amount = args.get("amount").and_then(|v| v.as_i64()).unwrap_or(3);
 
             let activate_block =
                 if let Some(app_name) = args.get("app_name").and_then(|v| v.as_str()) {
-                    let escaped_app = app_name.replace('"', "\\\"");
+                    let escaped_app = escape_applescript_string(app_name);
                     format!(
                         r#"
                 tell application "{escaped_app}" to activate
@@ -641,22 +638,22 @@ fn handler_scroll() -> ToolHandler {
 fn handler_drag() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
-            let from_x = args
-                .get("from_x")
-                .and_then(|v| v.as_i64())
-                .ok_or_else(|| anyhow::anyhow!("from_x is required"))?;
-            let from_y = args
-                .get("from_y")
-                .and_then(|v| v.as_i64())
-                .ok_or_else(|| anyhow::anyhow!("from_y is required"))?;
-            let to_x = args
-                .get("to_x")
-                .and_then(|v| v.as_i64())
-                .ok_or_else(|| anyhow::anyhow!("to_x is required"))?;
-            let to_y = args
-                .get("to_y")
-                .and_then(|v| v.as_i64())
-                .ok_or_else(|| anyhow::anyhow!("to_y is required"))?;
+            let from_x = match args.get("from_x").and_then(|v| v.as_i64()) {
+                Some(x) => x,
+                None => return Ok(error_result("from_x is required")),
+            };
+            let from_y = match args.get("from_y").and_then(|v| v.as_i64()) {
+                Some(y) => y,
+                None => return Ok(error_result("from_y is required")),
+            };
+            let to_x = match args.get("to_x").and_then(|v| v.as_i64()) {
+                Some(x) => x,
+                None => return Ok(error_result("to_x is required")),
+            };
+            let to_y = match args.get("to_y").and_then(|v| v.as_i64()) {
+                Some(y) => y,
+                None => return Ok(error_result("to_y is required")),
+            };
 
             // Use cliclick for drag operations, with a Python/Quartz fallback
             let script = format!(
@@ -703,21 +700,21 @@ Quartz.CGEventPost(Quartz.kCGHIDEventTap, ev)
 fn handler_select_menu() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
-            let app_name = args
-                .get("app_name")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("app_name is required"))?;
+            let app_name = match args.get("app_name").and_then(|v| v.as_str()) {
+                Some(a) => a,
+                None => return Ok(error_result("app_name is required")),
+            };
 
-            let menu_path = args
-                .get("menu_path")
-                .and_then(|v| v.as_array())
-                .ok_or_else(|| anyhow::anyhow!("menu_path is required and must be an array"))?;
+            let menu_path = match args.get("menu_path").and_then(|v| v.as_array()) {
+                Some(mp) => mp,
+                None => return Ok(error_result("menu_path is required and must be an array")),
+            };
 
             if menu_path.is_empty() {
                 return Ok(error_result("menu_path must contain at least one item."));
             }
 
-            let escaped_app = app_name.replace('"', "\\\"");
+            let escaped_app = escape_applescript_string(app_name);
 
             // Build the nested menu AppleScript expression.
             // ["File", "Save As..."] =>
@@ -726,7 +723,7 @@ fn handler_select_menu() -> ToolHandler {
             //   click menu item "Find..." of menu "Find" of menu item "Find" of menu "Edit" of menu bar 1
             let items: Vec<String> = menu_path
                 .iter()
-                .filter_map(|v| v.as_str().map(|s| s.replace('"', "\\\"")))
+                .filter_map(|v| v.as_str().map(escape_applescript_string))
                 .collect();
 
             let click_expr = if items.len() == 1 {
@@ -775,17 +772,17 @@ fn handler_select_menu() -> ToolHandler {
 fn handler_manage_window() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
-            let app_name = args
-                .get("app_name")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("app_name is required"))?;
+            let app_name = match args.get("app_name").and_then(|v| v.as_str()) {
+                Some(a) => a,
+                None => return Ok(error_result("app_name is required")),
+            };
 
-            let action = args
-                .get("action")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("action is required"))?;
+            let action = match args.get("action").and_then(|v| v.as_str()) {
+                Some(a) => a,
+                None => return Ok(error_result("action is required")),
+            };
 
-            let escaped_app = app_name.replace('"', "\\\"");
+            let escaped_app = escape_applescript_string(app_name);
 
             let script = match action {
                 "list" => {
@@ -862,14 +859,14 @@ fn handler_manage_window() -> ToolHandler {
                     )
                 }
                 "move" => {
-                    let x = args
-                        .get("x")
-                        .and_then(|v| v.as_i64())
-                        .ok_or_else(|| anyhow::anyhow!("x is required for move action"))?;
-                    let y = args
-                        .get("y")
-                        .and_then(|v| v.as_i64())
-                        .ok_or_else(|| anyhow::anyhow!("y is required for move action"))?;
+                    let x = match args.get("x").and_then(|v| v.as_i64()) {
+                        Some(x) => x,
+                        None => return Ok(error_result("x is required for move action")),
+                    };
+                    let y = match args.get("y").and_then(|v| v.as_i64()) {
+                        Some(y) => y,
+                        None => return Ok(error_result("y is required for move action")),
+                    };
                     format!(
                         r#"
                         tell application "System Events"
@@ -884,18 +881,14 @@ fn handler_manage_window() -> ToolHandler {
                     )
                 }
                 "resize" => {
-                    let width = args
-                        .get("width")
-                        .and_then(|v| v.as_i64())
-                        .ok_or_else(|| {
-                            anyhow::anyhow!("width is required for resize action")
-                        })?;
-                    let height = args
-                        .get("height")
-                        .and_then(|v| v.as_i64())
-                        .ok_or_else(|| {
-                            anyhow::anyhow!("height is required for resize action")
-                        })?;
+                    let width = match args.get("width").and_then(|v| v.as_i64()) {
+                        Some(w) => w,
+                        None => return Ok(error_result("width is required for resize action")),
+                    };
+                    let height = match args.get("height").and_then(|v| v.as_i64()) {
+                        Some(h) => h,
+                        None => return Ok(error_result("height is required for resize action")),
+                    };
                     format!(
                         r#"
                         tell application "System Events"
@@ -927,23 +920,20 @@ fn handler_manage_window() -> ToolHandler {
 fn handler_manage_app() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
-            let app_name = args
-                .get("app_name")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("app_name is required"))?;
+            let app_name = match args.get("app_name").and_then(|v| v.as_str()) {
+                Some(a) => a,
+                None => return Ok(error_result("app_name is required")),
+            };
 
-            let action = args
-                .get("action")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("action is required"))?;
+            let action = match args.get("action").and_then(|v| v.as_str()) {
+                Some(a) => a,
+                None => return Ok(error_result("action is required")),
+            };
 
-            let force = args
-                .get("force")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
+            let force = args.get("force").and_then(|v| v.as_bool()).unwrap_or(false);
 
-            let escaped_app = app_name.replace('"', "\\\"");
-            let escaped_app_shell = app_name.replace('\'', "'\\''");
+            let escaped_app = escape_applescript_string(app_name);
+            let escaped_app_shell = escape_shell_single_quoted(app_name);
 
             let script = match action {
                 "open" => {
@@ -989,20 +979,18 @@ fn handler_manage_app() -> ToolHandler {
 fn handler_file_dialog() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
-            let action = args
-                .get("action")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("action is required"))?;
+            let action = match args.get("action").and_then(|v| v.as_str()) {
+                Some(a) => a,
+                None => return Ok(error_result("action is required")),
+            };
 
             let script = match action {
                 "navigate" => {
-                    let path = args
-                        .get("path")
-                        .and_then(|v| v.as_str())
-                        .ok_or_else(|| {
-                            anyhow::anyhow!("path is required for navigate action")
-                        })?;
-                    let escaped_path = path.replace('\\', "\\\\").replace('"', "\\\"");
+                    let path = match args.get("path").and_then(|v| v.as_str()) {
+                        Some(p) => p,
+                        None => return Ok(error_result("path is required for navigate action")),
+                    };
+                    let escaped_path = escape_applescript_string(path);
 
                     // Cmd+Shift+G opens "Go to Folder", then type the path and press Return
                     format!(
@@ -1020,14 +1008,15 @@ fn handler_file_dialog() -> ToolHandler {
                     )
                 }
                 "set_filename" => {
-                    let filename = args
-                        .get("filename")
-                        .and_then(|v| v.as_str())
-                        .ok_or_else(|| {
-                            anyhow::anyhow!("filename is required for set_filename action")
-                        })?;
-                    let escaped_filename =
-                        filename.replace('\\', "\\\\").replace('"', "\\\"");
+                    let filename = match args.get("filename").and_then(|v| v.as_str()) {
+                        Some(f) => f,
+                        None => {
+                            return Ok(error_result(
+                                "filename is required for set_filename action",
+                            ));
+                        }
+                    };
+                    let escaped_filename = escape_applescript_string(filename);
 
                     // Select all in filename field and type the new name
                     format!(
@@ -1041,24 +1030,20 @@ fn handler_file_dialog() -> ToolHandler {
                         "#
                     )
                 }
-                "confirm" => {
-                    r#"
+                "confirm" => r#"
                     tell application "System Events"
                         key code 36
                     end tell
                     return "Confirmed file dialog"
                     "#
-                    .to_string()
-                }
-                "cancel" => {
-                    r#"
+                .to_string(),
+                "cancel" => r#"
                     tell application "System Events"
                         key code 53
                     end tell
                     return "Cancelled file dialog"
                     "#
-                    .to_string()
-                }
+                .to_string(),
                 _ => {
                     return Ok(error_result(format!(
                         "Unknown file dialog action: {action}. Use navigate, set_filename, confirm, or cancel."
@@ -1077,12 +1062,12 @@ fn handler_file_dialog() -> ToolHandler {
 fn handler_dock() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
-            let app_name = args
-                .get("app_name")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("app_name is required"))?;
+            let app_name = match args.get("app_name").and_then(|v| v.as_str()) {
+                Some(a) => a,
+                None => return Ok(error_result("app_name is required")),
+            };
 
-            let escaped_app = app_name.replace('"', "\\\"");
+            let escaped_app = escape_applescript_string(app_name);
 
             let script = format!(
                 r#"
@@ -1106,6 +1091,11 @@ fn handler_dock() -> ToolHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::macos::applescript::{MOCK_RUNNER, ScriptRunner};
+    use std::collections::HashMap;
+    use std::sync::Arc;
+    use std::sync::Mutex;
+    use std::time::Duration;
 
     #[test]
     fn test_tool_schemas_valid() {
@@ -1151,5 +1141,460 @@ mod tests {
         assert_eq!(key_name_to_code("a"), None);
         assert_eq!(key_name_to_code("z"), None);
         assert_eq!(key_name_to_code("unknown"), None);
+    }
+
+    struct AssertingMock {
+        expectations: Mutex<Vec<(String, Result<String, String>)>>,
+    }
+
+    impl AssertingMock {
+        fn new() -> Self {
+            Self {
+                expectations: Mutex::new(Vec::new()),
+            }
+        }
+
+        fn expect(self, fragment: &str, response: Result<&str, &str>) -> Self {
+            self.expectations.lock().unwrap().push((
+                fragment.to_string(),
+                response.map(|s| s.to_string()).map_err(|s| s.to_string()),
+            ));
+            self
+        }
+    }
+
+    impl ScriptRunner for AssertingMock {
+        fn run_applescript(&self, script: &str) -> anyhow::Result<String> {
+            let mut expectations = self.expectations.lock().unwrap();
+            if expectations.is_empty() {
+                panic!("Unexpected applescript call: {}", script);
+            }
+            let (expected_fragment, response) = expectations.remove(0);
+            assert!(
+                script.contains(&expected_fragment),
+                "script missing fragment {:?}:\n{}",
+                expected_fragment,
+                script
+            );
+            response.map_err(|e| anyhow::anyhow!(e))
+        }
+
+        fn run_applescript_with_timeout(
+            &self,
+            script: &str,
+            _timeout: Duration,
+        ) -> anyhow::Result<String> {
+            self.run_applescript(script)
+        }
+
+        fn run_jxa(&self, script: &str) -> anyhow::Result<String> {
+            self.run_applescript(script)
+        }
+    }
+
+    #[tokio::test]
+    async fn test_ui_controller_click_coords() {
+        let mock = Arc::new(
+            AssertingMock::new().expect("click at {100, 200}", Ok("Clicked at (100, 200)")),
+        );
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_click();
+                let mut args = HashMap::new();
+                args.insert("x".to_string(), json!(100));
+                args.insert("y".to_string(), json!(200));
+
+                let result = handler(args).await.unwrap();
+                assert_eq!(result.is_error, Some(false));
+                assert!(
+                    result.content[0]
+                        .as_text()
+                        .unwrap()
+                        .text
+                        .contains("Clicked at (100, 200)")
+                );
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_ui_controller_click_element() {
+        let mock = Arc::new(AssertingMock::new().expect(
+            "click button \"Submit\" of window 1",
+            Ok("Clicked element 'Submit' in 'Safari'"),
+        ));
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_click();
+                let mut args = HashMap::new();
+                args.insert("app_name".to_string(), json!("Safari"));
+                args.insert("element_name".to_string(), json!("Submit"));
+
+                let result = handler(args).await.unwrap();
+                assert_eq!(result.is_error, Some(false));
+                assert!(
+                    result.content[0]
+                        .as_text()
+                        .unwrap()
+                        .text
+                        .contains("Clicked element 'Submit' in 'Safari'")
+                );
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_ui_controller_type_text() {
+        let mock = Arc::new(
+            AssertingMock::new().expect("keystroke \"Hello World\"", Ok("Typed text successfully")),
+        );
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_type_text();
+                let mut args = HashMap::new();
+                args.insert("text".to_string(), json!("Hello World"));
+                args.insert("app_name".to_string(), json!("Notes"));
+
+                let result = handler(args).await.unwrap();
+                assert_eq!(result.is_error, Some(false));
+                assert!(
+                    result.content[0]
+                        .as_text()
+                        .unwrap()
+                        .text
+                        .contains("Typed text successfully")
+                );
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_ui_controller_type_text_escaping() {
+        let mock = Arc::new(AssertingMock::new().expect(
+            "keystroke \"Text with \\\"quotes\\\" and \\\\backslash\"",
+            Ok("Typed text successfully"),
+        ));
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_type_text();
+                let mut args = HashMap::new();
+                args.insert(
+                    "text".to_string(),
+                    json!("Text with \"quotes\" and \\backslash"),
+                );
+                args.insert("app_name".to_string(), json!("Notes"));
+
+                let result = handler(args).await.unwrap();
+                assert_eq!(result.is_error, Some(false));
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_ui_controller_press_key() {
+        let mock = Arc::new(AssertingMock::new().expect(
+            "key code 36 using {command down}",
+            Ok("Pressed key: return"),
+        ));
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_press_key();
+                let mut args = HashMap::new();
+                args.insert("key".to_string(), json!("return"));
+                args.insert("modifiers".to_string(), json!(["command"]));
+
+                let result = handler(args).await.unwrap();
+                assert_eq!(result.is_error, Some(false));
+                assert!(
+                    result.content[0]
+                        .as_text()
+                        .unwrap()
+                        .text
+                        .contains("Pressed key: return")
+                );
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_ui_controller_scroll() {
+        let mock = Arc::new(AssertingMock::new().expect(
+            "repeat 5 times\n                        key code 125",
+            Ok("Scrolled down 5 steps"),
+        ));
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_scroll();
+                let mut args = HashMap::new();
+                args.insert("direction".to_string(), json!("down"));
+                args.insert("amount".to_string(), json!(5));
+
+                let result = handler(args).await.unwrap();
+                assert_eq!(result.is_error, Some(false));
+                assert!(
+                    result.content[0]
+                        .as_text()
+                        .unwrap()
+                        .text
+                        .contains("Scrolled down 5 steps")
+                );
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_ui_controller_drag() {
+        let mock = Arc::new(AssertingMock::new().expect(
+            "cliclick dd:100,100 du:500,500",
+            Ok("Dragged from (100, 100) to (500, 500)"),
+        ));
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_drag();
+                let mut args = HashMap::new();
+                args.insert("from_x".to_string(), json!(100));
+                args.insert("from_y".to_string(), json!(100));
+                args.insert("to_x".to_string(), json!(500));
+                args.insert("to_y".to_string(), json!(500));
+
+                let result = handler(args).await.unwrap();
+                assert_eq!(result.is_error, Some(false));
+                assert!(
+                    result.content[0]
+                        .as_text()
+                        .unwrap()
+                        .text
+                        .contains("Dragged from (100, 100) to (500, 500)")
+                );
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_ui_controller_select_menu() {
+        let mock = Arc::new(AssertingMock::new().expect(
+            "click menu item \"Save As...\" of menu \"File\" of menu bar 1",
+            Ok("Selected menu: File > Save As..."),
+        ));
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_select_menu();
+                let mut args = HashMap::new();
+                args.insert("app_name".to_string(), json!("Safari"));
+                args.insert("menu_path".to_string(), json!(["File", "Save As..."]));
+
+                let result = handler(args).await.unwrap();
+                assert_eq!(result.is_error, Some(false));
+                assert!(
+                    result.content[0]
+                        .as_text()
+                        .unwrap()
+                        .text
+                        .contains("Selected menu: File > Save As...")
+                );
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_ui_controller_manage_window() {
+        let mock = Arc::new(AssertingMock::new().expect(
+            "set value of attribute \"AXMinimized\" of window 1 to true",
+            Ok("Minimized front window of Safari"),
+        ));
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_manage_window();
+                let mut args = HashMap::new();
+                args.insert("app_name".to_string(), json!("Safari"));
+                args.insert("action".to_string(), json!("minimize"));
+
+                let result = handler(args).await.unwrap();
+                assert_eq!(result.is_error, Some(false));
+                assert!(
+                    result.content[0]
+                        .as_text()
+                        .unwrap()
+                        .text
+                        .contains("Minimized front window of Safari")
+                );
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_ui_controller_manage_app() {
+        let mock = Arc::new(AssertingMock::new().expect(
+            "tell application \"Safari\" to activate",
+            Ok("Opened Safari"),
+        ));
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_manage_app();
+                let mut args = HashMap::new();
+                args.insert("app_name".to_string(), json!("Safari"));
+                args.insert("action".to_string(), json!("open"));
+
+                let result = handler(args).await.unwrap();
+                assert_eq!(result.is_error, Some(false));
+                assert!(
+                    result.content[0]
+                        .as_text()
+                        .unwrap()
+                        .text
+                        .contains("Opened Safari")
+                );
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_ui_controller_file_dialog() {
+        let mock = Arc::new(
+            AssertingMock::new()
+                .expect("keystroke \"/Users/test\"", Ok("Navigated to: /Users/test")),
+        );
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_file_dialog();
+                let mut args = HashMap::new();
+                args.insert("action".to_string(), json!("navigate"));
+                args.insert("path".to_string(), json!("/Users/test"));
+
+                let result = handler(args).await.unwrap();
+                assert_eq!(result.is_error, Some(false));
+                assert!(
+                    result.content[0]
+                        .as_text()
+                        .unwrap()
+                        .text
+                        .contains("Navigated to: /Users/test")
+                );
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_ui_controller_dock() {
+        let mock = Arc::new(AssertingMock::new().expect(
+            "click UI element \"Safari\" of list 1",
+            Ok("Clicked 'Safari' in Dock"),
+        ));
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_dock();
+                let mut args = HashMap::new();
+                args.insert("app_name".to_string(), json!("Safari"));
+
+                let result = handler(args).await.unwrap();
+                assert_eq!(result.is_error, Some(false));
+                assert!(
+                    result.content[0]
+                        .as_text()
+                        .unwrap()
+                        .text
+                        .contains("Clicked 'Safari' in Dock")
+                );
+            })
+            .await;
+    }
+
+    /// When osascript fails (e.g. Accessibility permission denied), ui_controller
+    /// handlers must return a graceful error result instead of panicking or
+    /// propagating a raw anyhow error.
+    #[tokio::test]
+    async fn test_click_returns_error_result_on_osascript_failure() {
+        // Use a minimal bespoke mock that always returns Err, rather than the
+        // queue-based AssertingMock which expects a fragment match.
+        struct ErrorMock;
+        impl ScriptRunner for ErrorMock {
+            fn run_applescript(&self, _script: &str) -> anyhow::Result<String> {
+                Err(anyhow::anyhow!(
+                    "osascript: System Events got an error: osascript is not allowed assistive access"
+                ))
+            }
+            fn run_applescript_with_timeout(
+                &self,
+                _script: &str,
+                _timeout: Duration,
+            ) -> anyhow::Result<String> {
+                unimplemented!()
+            }
+            fn run_jxa(&self, _script: &str) -> anyhow::Result<String> {
+                unimplemented!()
+            }
+        }
+
+        let mock = Arc::new(ErrorMock);
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_click();
+                let mut args = HashMap::new();
+                args.insert("x".to_string(), json!(100));
+                args.insert("y".to_string(), json!(200));
+
+                let result = handler(args)
+                    .await
+                    .expect("Handler should not panic on osascript error");
+                assert_eq!(result.is_error, Some(true));
+
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert!(
+                    content.to_lowercase().contains("fail")
+                        || content.to_lowercase().contains("error"),
+                    "Expected a human-readable error, got: {}",
+                    content
+                );
+                assert!(
+                    content.contains("assistive access"),
+                    "Expected underlying error to be surfaced, got: {}",
+                    content
+                );
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_validation_click_requires_params() {
+        let handler = handler_click();
+        let args = HashMap::new();
+
+        let result = handler(args).await.expect("Handler should not panic");
+        assert_eq!(result.is_error, Some(true));
+        assert!(
+            result.content[0]
+                .as_text()
+                .unwrap()
+                .text
+                .contains("Provide either x/y coordinates or app_name + element_name")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_validation_type_text_requires_text() {
+        let handler = handler_type_text();
+        let args = HashMap::new();
+
+        let result = handler(args).await.expect("Handler should not panic");
+        assert_eq!(result.is_error, Some(true));
+        assert!(
+            result.content[0]
+                .as_text()
+                .unwrap()
+                .text
+                .contains("text is required")
+        );
     }
 }
