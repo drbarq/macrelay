@@ -2,3 +2,12 @@
 *.swp
 *.swo
 .DS_Store
+
+# MCPB build artifacts — regenerate with scripts or `cargo build --release && cp ... && zip ...`
+/dist
+/mcpb/server/macrelay
+
+# Intermediate icon staging — regenerate from assets/macrelay_1024.png
+/assets/macrelay.iconset
+/assets/macrelay_template_1024.png
+/assets/macrelay_template_trimmed.png
