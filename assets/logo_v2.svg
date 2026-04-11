@@ -1,0 +1,58 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background: Technical Blueprint Grid -->
+  <rect width="1024" height="1024" fill="#1A1C1E"/>
+  <defs>
+    <pattern id="grid" width="100" height="100" patternUnits="userSpaceOnUse">
+      <path d="M 100 0 L 0 0 0 100" fill="none" stroke="#2D3134" stroke-width="2"/>
+    </pattern>
+    <pattern id="smallGrid" width="20" height="20" patternUnits="userSpaceOnUse">
+      <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#24272A" stroke-width="1"/>
+    </pattern>
+    
+    <linearGradient id="glow_grad" x1="512" y1="200" x2="512" y2="800" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#00D1FF" stop-opacity="0.8"/>
+      <stop offset="1" stop-color="#0072FF" stop-opacity="0.2"/>
+    </linearGradient>
+  </defs>
+  
+  <rect width="1024" height="1024" fill="url(#smallGrid)"/>
+  <rect width="1024" height="1024" fill="url(#grid)"/>
+
+  <!-- Stylized Apple Silhouette (Outline) -->
+  <path d="M512 850c-45 0-90-15-130-15s-85 15-130 15c-80 0-150-50-190-130-40-80-40-180 0-260 40-80 110-130 190-130 45 0 85 15 130 15s85-15 130-15c80 0 150 50 190 130 40 80 40 180 0 260-40 80-110 130-190 130z" stroke="#4A4E52" stroke-width="4" stroke-dasharray="10 10"/>
+  <path d="M512 330c0-60 40-110 90-110s90 50 90 110-40 110-90 110-90-50-90-110z" stroke="#4A4E52" stroke-width="4" stroke-dasharray="10 10"/>
+
+  <!-- The "Neural Relay" Core -->
+  <g opacity="0.9">
+    <!-- Center Relay Node -->
+    <rect x="462" y="462" width="100" height="100" rx="10" stroke="#00D1FF" stroke-width="4" fill="#1A1C1E"/>
+    <circle cx="512" cy="512" r="30" fill="url(#glow_grad)"/>
+    <path d="M512 482V542M482 512H542" stroke="white" stroke-width="6" stroke-linecap="round"/>
+
+    <!-- Neural Circuitry Paths -->
+    <!-- Path 1: Top (Calendar) -->
+    <path d="M512 462V350H650" stroke="#00D1FF" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <circle cx="650" cy="350" r="8" fill="#00D1FF"/>
+    <text x="665" y="355" fill="#4A4E52" font-family="monospace" font-size="14">SYS.CALENDAR</text>
+
+    <!-- Path 2: Right (Mail) -->
+    <path d="M562 512H700V600" stroke="#00D1FF" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <circle cx="700" cy="600" r="8" fill="#00D1FF"/>
+    <text x="715" y="605" fill="#4A4E52" font-family="monospace" font-size="14">NET.MAIL</text>
+
+    <!-- Path 3: Bottom (UI) -->
+    <path d="M512 562V700H350" stroke="#00D1FF" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <circle cx="350" cy="700" r="8" fill="#00D1FF"/>
+    <text x="260" y="705" fill="#4A4E52" font-family="monospace" font-size="14">UI.CONTROLLER</text>
+
+    <!-- Path 4: Left (AI/MCP) -->
+    <path d="M462 512H300" stroke="#00D1FF" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <circle cx="300" cy="512" r="12" stroke="#00D1FF" stroke-width="2"/>
+    <text x="230" y="517" fill="#00D1FF" font-family="monospace" font-size="16" font-weight="bold">AI.MCP</text>
+  </g>
+
+  <!-- Corner Specs -->
+  <text x="50" y="950" fill="#4A4E52" font-family="monospace" font-size="12">MODEL: MACRELAY-OSS</text>
+  <text x="50" y="970" fill="#4A4E52" font-family="monospace" font-size="12">AUTH: NATIVE-TCC</text>
+  <text x="800" y="970" fill="#4A4E52" font-family="monospace" font-size="12">REV: 2026.04.10</text>
+</svg>
