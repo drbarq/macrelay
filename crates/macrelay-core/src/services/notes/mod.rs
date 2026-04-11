@@ -87,7 +87,7 @@ pub fn register(registry: &mut ServiceRegistry) {
         "notes_write_note",
         Tool::new(
             "notes_write_note",
-            "Create a new note with a title and HTML body. Optionally specify a folder.",
+            "Create a new note with a title and HTML body. Optionally specify a folder and account.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -101,7 +101,11 @@ pub fn register(registry: &mut ServiceRegistry) {
                     },
                     "folder": {
                         "type": "string",
-                        "description": "Folder to create the note in. Defaults to the default 'Notes' folder."
+                        "description": "Folder to create the note in. Defaults to 'Notes'."
+                    },
+                    "account": {
+                        "type": "string",
+                        "description": "Account to create the note in (e.g. 'iCloud', 'On My Mac'). If omitted, prefers iCloud. Use notes_list_accounts to see available accounts."
                     }
                 },
                 "required": ["title", "body"]
@@ -133,7 +137,7 @@ pub fn register(registry: &mut ServiceRegistry) {
         "notes_restore_note",
         Tool::new(
             "notes_restore_note",
-            "Restore a note from Recently Deleted by moving it back to a target folder.",
+            "Restore a note from Recently Deleted by moving it back to a target folder and account.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {
@@ -144,6 +148,10 @@ pub fn register(registry: &mut ServiceRegistry) {
                     "folder": {
                         "type": "string",
                         "description": "Folder to restore the note to. Defaults to 'Notes'."
+                    },
+                    "account": {
+                        "type": "string",
+                        "description": "Account to restore the note to (e.g. 'iCloud', 'On My Mac'). If omitted, prefers iCloud. Use notes_list_accounts to see available accounts."
                     }
                 },
                 "required": ["name"]
@@ -396,33 +404,93 @@ fn handler_write_note() -> ToolHandler {
                 .and_then(|v| v.as_str())
                 .unwrap_or("Notes");
 
+            let account = args.get("account").and_then(|v| v.as_str());
+
             let escaped_title = title.replace('"', "\\\"");
             let escaped_body = body.replace('"', "\\\"");
             let escaped_folder = folder.replace('"', "\\\"");
 
-            let script = format!(
-                r#"
-                tell application "Notes"
-                    set targetFolder to missing value
-                    repeat with a in accounts
-                        repeat with f in folders of a
-                            if name of f is "{escaped_folder}" then
-                                set targetFolder to f
-                                exit repeat
-                            end if
+            let script = if let Some(acct) = account {
+                // Account explicitly specified - scope to that account only
+                let escaped_account = acct.replace('"', "\\\"");
+                format!(
+                    r#"
+                    tell application "Notes"
+                        set targetFolder to missing value
+                        try
+                            set targetAcct to account "{escaped_account}"
+                            repeat with f in folders of targetAcct
+                                if name of f is "{escaped_folder}" then
+                                    set targetFolder to f
+                                    exit repeat
+                                end if
+                            end repeat
+                        on error
+                            return "ERROR:Account not found: {escaped_account}. Use notes_list_accounts to see available accounts."
+                        end try
+
+                        if targetFolder is missing value then
+                            return "ERROR:Folder '{escaped_folder}' not found in account '{escaped_account}'. Use notes_list_folders to see available folders."
+                        end if
+
+                        make new note at targetFolder with properties {{name:"{escaped_title}", body:"{escaped_body}"}}
+                        return "Note created: {escaped_title} in folder {escaped_folder} (account: {escaped_account})"
+                    end tell
+                    "#
+                )
+            } else {
+                // No account specified - find all accounts with this folder, prefer iCloud
+                format!(
+                    r#"
+                    tell application "Notes"
+                        set matchingAccounts to {{}}
+                        set targetFolder to missing value
+                        set iCloudFolder to missing value
+
+                        repeat with a in accounts
+                            set acctName to name of a
+                            repeat with f in folders of a
+                                if name of f is "{escaped_folder}" then
+                                    set end of matchingAccounts to acctName
+                                    if targetFolder is missing value then
+                                        set targetFolder to f
+                                        set targetAcctName to acctName
+                                    end if
+                                    if acctName contains "iCloud" then
+                                        set iCloudFolder to f
+                                        set iCloudAcctName to acctName
+                                    end if
+                                    exit repeat
+                                end if
+                            end repeat
                         end repeat
-                        if targetFolder is not missing value then exit repeat
-                    end repeat
 
-                    if targetFolder is missing value then
-                        return "ERROR:Folder not found: {escaped_folder}"
-                    end if
+                        if targetFolder is missing value then
+                            return "ERROR:Folder not found: {escaped_folder}. Use notes_list_folders to see available folders."
+                        end if
 
-                    make new note at targetFolder with properties {{name:"{escaped_title}", body:"{escaped_body}"}}
-                    return "Note created: {escaped_title} in folder {escaped_folder}"
-                end tell
-                "#
-            );
+                        -- Prefer iCloud if available
+                        if iCloudFolder is not missing value then
+                            set targetFolder to iCloudFolder
+                            set targetAcctName to iCloudAcctName
+                        end if
+
+                        make new note at targetFolder with properties {{name:"{escaped_title}", body:"{escaped_body}"}}
+
+                        set resultMsg to "Note created: {escaped_title} in folder {escaped_folder} (account: " & targetAcctName & ")"
+                        if (count of matchingAccounts) > 1 then
+                            set acctList to ""
+                            repeat with i from 1 to count of matchingAccounts
+                                if i > 1 then set acctList to acctList & ", "
+                                set acctList to acctList & item i of matchingAccounts
+                            end repeat
+                            set resultMsg to resultMsg & ". Note: folder '{escaped_folder}' exists in multiple accounts: " & acctList & ". Use the account parameter to target a specific one."
+                        end if
+                        return resultMsg
+                    end tell
+                    "#
+                )
+            };
 
             match crate::macos::applescript::run_applescript(&script) {
                 Ok(output) => {
@@ -489,53 +557,121 @@ fn handler_restore_note() -> ToolHandler {
                 .and_then(|v| v.as_str())
                 .unwrap_or("Notes");
 
+            let account = args.get("account").and_then(|v| v.as_str());
+
             let escaped_name = name.replace('"', "\\\"");
             let escaped_folder = folder.replace('"', "\\\"");
 
-            let script = format!(
-                r#"
-                tell application "Notes"
-                    -- Find the target folder to restore to
-                    set targetFolder to missing value
-                    repeat with a in accounts
-                        repeat with f in folders of a
-                            if name of f is "{escaped_folder}" then
-                                set targetFolder to f
-                                exit repeat
-                            end if
+            let script = if let Some(acct) = account {
+                // Account explicitly specified. Avoid all reference-chain iteration:
+                // direct by-name lookups + `whose` filters keep references concrete.
+                let escaped_account = acct.replace('"', "\\\"");
+                format!(
+                    r#"
+                    tell application "Notes"
+                        try
+                            set targetAcct to account "{escaped_account}"
+                        on error
+                            return "ERROR:Account not found: {escaped_account}. Use notes_list_accounts to see available accounts."
+                        end try
+
+                        try
+                            set targetFolderRef to folder "{escaped_folder}" of targetAcct
+                            get name of targetFolderRef
+                        on error
+                            return "ERROR:Folder '{escaped_folder}' not found in account '{escaped_account}'. Use notes_list_folders to see available folders."
+                        end try
+
+                        -- Scan each account's Recently Deleted via by-name lookup + whose filter
+                        set noteFound to false
+                        repeat with a in accounts
+                            set acctName to name of a
+                            try
+                                set rdFolder to folder "Recently Deleted" of a
+                                set matches to (every note of rdFolder whose name is "{escaped_name}")
+                                if (count of matches) > 0 then
+                                    move (item 1 of matches) to folder "{escaped_folder}" of account "{escaped_account}"
+                                    set noteFound to true
+                                    exit repeat
+                                end if
+                            end try
                         end repeat
-                        if targetFolder is not missing value then exit repeat
-                    end repeat
 
-                    if targetFolder is missing value then
-                        return "ERROR:Target folder not found: {escaped_folder}"
-                    end if
+                        if noteFound then
+                            return "Restored note: {escaped_name} to folder {escaped_folder} (account: {escaped_account})"
+                        else
+                            return "ERROR:No note named '{escaped_name}' found in Recently Deleted"
+                        end if
+                    end tell
+                    "#
+                )
+            } else {
+                // No account specified - prefer iCloud, report alternatives.
+                // Track the target account by NAME string only; avoid iterating
+                // folder/note reference chains.
+                format!(
+                    r#"
+                    tell application "Notes"
+                        set matchingAccounts to {{}}
+                        set targetAcctName to missing value
+                        set iCloudAcctName to missing value
 
-                    -- Search Recently Deleted folders for the note
-                    set noteFound to false
-                    repeat with a in accounts
-                        repeat with f in folders of a
-                            if name of f is "Recently Deleted" then
-                                repeat with n in notes of f
-                                    if name of n is "{escaped_name}" then
-                                        move n to targetFolder
-                                        set noteFound to true
-                                        exit repeat
-                                    end if
+                        -- Phase 1: discover which accounts contain the target folder (by name)
+                        repeat with a in accounts
+                            set acctName to name of a
+                            try
+                                set probeFolder to folder "{escaped_folder}" of a
+                                get name of probeFolder
+                                set end of matchingAccounts to acctName
+                                if targetAcctName is missing value then
+                                    set targetAcctName to acctName
+                                end if
+                                if acctName contains "iCloud" then
+                                    set iCloudAcctName to acctName
+                                end if
+                            end try
+                        end repeat
+
+                        if targetAcctName is missing value then
+                            return "ERROR:Target folder not found: {escaped_folder}. Use notes_list_folders to see available folders."
+                        end if
+
+                        if iCloudAcctName is not missing value then
+                            set targetAcctName to iCloudAcctName
+                        end if
+
+                        -- Phase 2: scan each account's Recently Deleted via by-name lookup + whose filter
+                        set noteFound to false
+                        repeat with a in accounts
+                            try
+                                set rdFolder to folder "Recently Deleted" of a
+                                set matches to (every note of rdFolder whose name is "{escaped_name}")
+                                if (count of matches) > 0 then
+                                    move (item 1 of matches) to folder "{escaped_folder}" of (first account whose name is targetAcctName)
+                                    set noteFound to true
+                                    exit repeat
+                                end if
+                            end try
+                        end repeat
+
+                        if noteFound then
+                            set resultMsg to "Restored note: {escaped_name} to folder {escaped_folder} (account: " & targetAcctName & ")"
+                            if (count of matchingAccounts) > 1 then
+                                set acctList to ""
+                                repeat with i from 1 to count of matchingAccounts
+                                    if i > 1 then set acctList to acctList & ", "
+                                    set acctList to acctList & item i of matchingAccounts
                                 end repeat
+                                set resultMsg to resultMsg & ". Note: folder '{escaped_folder}' exists in multiple accounts: " & acctList & ". Use the account parameter to target a specific one."
                             end if
-                        end repeat
-                        if noteFound then exit repeat
-                    end repeat
-
-                    if noteFound then
-                        return "Restored note: {escaped_name} to folder {escaped_folder}"
-                    else
-                        return "ERROR:No note named '{escaped_name}' found in Recently Deleted"
-                    end if
-                end tell
-                "#
-            );
+                            return resultMsg
+                        else
+                            return "ERROR:No note named '{escaped_name}' found in Recently Deleted"
+                        end if
+                    end tell
+                    "#
+                )
+            };
 
             match crate::macos::applescript::run_applescript(&script) {
                 Ok(output) => {
@@ -611,5 +747,21 @@ mod tests {
         assert!(names.contains(&"notes_delete_note"));
         assert!(names.contains(&"notes_restore_note"));
         assert!(names.contains(&"notes_open_note"));
+    }
+
+    #[test]
+    fn test_write_and_restore_have_account_param() {
+        let mut registry = ServiceRegistry::new();
+        register(&mut registry);
+        let tools = registry.list_tools();
+
+        for tool_name in &["notes_write_note", "notes_restore_note"] {
+            let tool = tools.iter().find(|t| t.name.as_ref() == *tool_name).unwrap();
+            let props = tool.input_schema.get("properties").and_then(|v| v.as_object());
+            assert!(
+                props.is_some_and(|p| p.contains_key("account")),
+                "{tool_name} should have an 'account' parameter"
+            );
+        }
     }
 }
