@@ -184,3 +184,15 @@ Based on user value and implementation difficulty:
 6. **Finder** (10 tools) - Useful but overlaps with shell commands
 7. **Photos** (7 tools) - Complex (SQLite + MediaLibrary), high value
 8. **Terminal** (4 tools) - Powerful but security-sensitive
+
+## Testing & Infrastructure (post-v1)
+
+Current state at v1.0: 166 tests (137 CI-safe Tier 1/2, 29 local-only Tier 3). GitHub Actions CI on `macos-latest` runs `fmt` + `clippy -D warnings` + `test --lib` on every push/PR. See [TESTING.md](TESTING.md) for the full strategy.
+
+Possible additions:
+
+- **Real code coverage reporting** — wire up `cargo-llvm-cov` or `cargo-tarpaulin` to CI and upload to [codecov.io](https://codecov.io). Would give real line/branch coverage percentages in PR comments and a badge for the README. Currently the README shows a static "tests: 137 passing" badge; a codecov badge would show actual coverage %.
+- **Integration test coverage for UI Viewer / UI Controller** — these are Tier 2 mock-tested only because Tier 3 requires a target app in a known visual state. A dedicated "testbed app" (small SwiftUI or Tauri shell with known buttons, text fields, menus) would let us write deterministic Tier 3 UI round-trip tests.
+- **Mutation testing** — run `cargo-mutants` against the escape helpers and date-math functions to catch tests that pass but don't actually prevent bugs.
+- **Fuzzing** — `cargo-fuzz` or `arbitrary` against the argument-parsing and escape functions to catch weird inputs (zero bytes, unpaired surrogates, massive strings).
+- **Release builds in CI** — the workflow currently builds debug on every PR. A release build job could catch optimizer-only regressions.

@@ -1,5 +1,12 @@
 # MacRelay
 
+[![CI](https://github.com/drbarq/macrelay/actions/workflows/ci.yml/badge.svg)](https://github.com/drbarq/macrelay/actions/workflows/ci.yml)
+![Tests](https://img.shields.io/badge/tests-137%20passing-brightgreen)
+![Tools](https://img.shields.io/badge/tools-71%20across%2013%20services-blue)
+![Platform](https://img.shields.io/badge/platform-macOS%2014%2B-lightgrey)
+![Rust](https://img.shields.io/badge/rust-1.85%2B-orange)
+![License](https://img.shields.io/badge/license-MIT-blue)
+
 Open-source MCP server that relays your AI's commands to native macOS apps.
 
 A local, privacy-first replacement for [MacUse](https://macuse.app) ($39) that works with Claude Desktop, Cursor, Claude Code, and any MCP-compatible client. No cloud, no subscriptions, no telemetry.
@@ -54,6 +61,13 @@ The setup script:
 
 **Feature complete.** 71 tools across 13 services. Full parity with MacUse.
 
+| Metric | Value |
+|---|---|
+| Tools implemented | 71 |
+| Tests written | 166 (137 CI-safe, 29 local-only) |
+| Coverage | 13/13 services |
+| CI Status | passing (GitHub Actions) |
+
 | Service | # | Tools | Status |
 |---|---|---|---|
 | **Calendar** | 8 | list_calendars, search_events, create_event, reschedule_event, cancel_event, update_event, open_event, find_available_times | Done |
@@ -92,7 +106,7 @@ This entire project was built in a single Claude Code session:
 | Total tokens | 113M (845k in, 283k out, 112.7M cached) |
 | Throughput | 103 tokens/sec (4.7 in, 98.6 out) |
 | Tools implemented | 71 |
-| Tests written | 27 |
+| Tests written | 166 |
 | Lines of Rust | ~8,000 |
 
 The process:
@@ -100,6 +114,7 @@ The process:
 2. Identified all 55+ tools, source module structure, and technical approach
 3. Built the MCP server from scratch using the same `rmcp` crate
 4. Implemented all services in 4 phases using parallel agent workflows
+5. Refined the testing suite to 166 meaningful unit and integration tests (137 CI-safe mock + pure unit tests, 29 local-only Tier 3 round-trip tests)
 
 ## Architecture
 
@@ -150,12 +165,13 @@ macrelay/
           shortcuts/                # 3 tools - /usr/bin/shortcuts
           permissions_status.rs     # 1 tool
         macos/
-          applescript.rs            # osascript/JXA runner
+          applescript.rs            # osascript/JXA runner (with mocking)
           eventkit.rs               # EventKit helpers
   scripts/
     setup-claude.sh                 # Build + install + configure
   docs/
     PRD.md                          # Full product requirements
+    TESTING.md                      # Comprehensive testing strategy
 ```
 
 ## Permissions
@@ -173,12 +189,24 @@ Use the `permissions_status` tool to check all states at once.
 
 ## Testing
 
+MacRelay uses a three-tier testing strategy (see [docs/TESTING.md](docs/TESTING.md) for the full strategy, audit, and per-service coverage report).
+
 ```bash
-cargo test              # 27 unit tests (no permissions needed)
-cargo test -- --ignored # Integration tests (needs macOS permissions)
+# Run 137 CI-safe unit and mock-based tests (Tier 1 & 2), ~10s, no permissions
+cargo test -p macrelay-core --lib
+
+# Run all 166 tests including 29 local-only tests that hit real macOS apps (Tier 3)
+# WARNING: This will interact with your real Calendar/Notes/Mail/Reminders/Contacts.
+cargo test -p macrelay-core --all-targets -- --include-ignored
 ```
 
-Every service includes schema validation tests. 27 tests currently passing.
+| Tier | What it validates | Count | Runs in CI? |
+|---|---|---:|:---:|
+| **Tier 1** — Pure unit | Schemas, registration, helper functions (escape, key codes, date math) | ~20 | ✓ |
+| **Tier 2** — Script-inspecting mocks | Every tool's generated AppleScript/JXA fragment + response parsing + error paths + required-param validation | ~117 | ✓ |
+| **Tier 3** — Real-app round-trips | End-to-end against real Calendar/Reminders/Notes/Mail/Contacts/Messages | 29 (`#[ignore]`d) | ✗ (maintainer's Mac only) |
+
+The CI workflow on every push/PR runs `cargo fmt --check`, `cargo clippy -- -D warnings`, and `cargo test -p macrelay-core --lib` on `macos-latest`. All three gates must pass.
 
 ## Roadmap
 
@@ -187,14 +215,16 @@ Every service includes schema validation tests. 27 tests currently passing.
 - [x] Phase 2: Notes + Mail + Messages + Location + Maps (30 tools)
 - [x] Phase 3: UI Viewer + UI Controller (16 tools)
 - [x] Phase 4: Stickies + Shortcuts (7 tools)
+- [x] Phase 5: Testing refinement (166 tests: 137 CI-safe, 29 local-only Tier 3 round-trips)
+- [x] Phase 6: GitHub Actions CI (fmt + clippy + tests on `macos-latest`)
 
 ### Future: Beyond MacUse
 Potential additions that go beyond what MacUse offers:
 
+- [ ] **System Control** - Volume, brightness, Wi-Fi, battery, DND
 - [ ] **Safari/Browser** - Bookmarks, history, reading list, open tabs
 - [ ] **Music** - Playback control, search library, queue management
 - [ ] **Photos** - Search photos, browse albums, get metadata
-- [ ] **System** - Volume, brightness, Wi-Fi, Bluetooth, Do Not Disturb
 - [ ] **Clipboard** - Read/write clipboard contents
 - [ ] **Notifications** - Send macOS notifications
 - [ ] **Finder** - Advanced file operations, tags, Spotlight search
@@ -212,7 +242,7 @@ Adding a new service is self-contained:
 1. Create a module in `crates/macrelay-core/src/services/`
 2. Implement tools following the pattern in `calendar/mod.rs`
 3. Register in `services/mod.rs` and `macrelay-server/src/main.rs`
-4. Add tests
+4. Add tests (Tier 1 and Tier 2)
 
 See [docs/PRD.md](docs/PRD.md) for the full product requirements and technical details.
 

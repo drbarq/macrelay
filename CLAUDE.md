@@ -16,15 +16,24 @@ MacRelay is an open-source MCP server that relays AI commands to native macOS ap
 - **Location:** CoreLocation via Swift subprocess
 - **Maps:** Apple Maps URL scheme
 
-## Build Commands
+## Build & Test Commands
 
 ```bash
 cargo build                    # Debug build
 cargo build --release          # Release build (~4MB binary)
-cargo test                     # 27 unit tests (no permissions needed)
-cargo test -- --ignored        # Integration tests (needs macOS permissions)
+cargo test -p macrelay-core --lib                                  # 137 CI-safe tests, ~10s, no permissions
+cargo test -p macrelay-core --all-targets -- --include-ignored     # All 166 (includes 29 Tier 3 local-only)
+cargo fmt -- --check && cargo clippy --all-targets -- -D warnings  # The other two CI gates
 bash scripts/setup-claude.sh   # Build + install + configure Claude Desktop/Code
 ```
+
+## Testing Strategy
+
+- **Tier 1 (Pure Unit):** Helper functions, schema validation.
+- **Tier 2 (Mock Runner):** Intercepts AppleScript/JXA. **Must** assert script content.
+- **Tier 3 (Integration):** Local-only, hits real apps. **Must** clean up all created data.
+- **Rule:** Every tool MUST have Tier 1/2 coverage before shipping.
+- **Stability:** Tools return `Ok(error_result)` for missing args, not protocol `Err`.
 
 ## Services (13 services, 71 tools)
 
@@ -47,7 +56,7 @@ bash scripts/setup-claude.sh   # Build + install + configure Claude Desktop/Code
 ## Key Directories
 
 - `crates/macrelay-core/src/services/` - 13 service modules
-- `crates/macrelay-core/src/macos/` - applescript.rs, eventkit.rs
+- `crates/macrelay-core/src/macos/` - applescript.rs, escape.rs, eventkit.rs
 - `crates/macrelay-core/src/registry.rs` - ServiceRegistry with dynamic tool routing
 - `crates/macrelay-core/src/permissions.rs` - Permission checking
 - `crates/macrelay-server/src/main.rs` - MCP ServerHandler impl
@@ -70,4 +79,4 @@ bash scripts/setup-claude.sh   # Build + install + configure Claude Desktop/Code
 2. Implement `pub fn register(registry: &mut ServiceRegistry)` with tools
 3. Add `pub mod myservice;` to `services/mod.rs`
 4. Add `macrelay_core::services::myservice::register(&mut registry);` to `main.rs`
-5. Add tests in `#[cfg(test)] mod tests`
+5. Add tests in `#[cfg(test)] mod tests` (Tier 1/2)

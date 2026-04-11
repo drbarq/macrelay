@@ -4,7 +4,7 @@
 
 **All phases complete. Feature parity with MacUse achieved.**
 
-71 tools across 13 services, 27 tests passing.
+71 tools across 13 services. Test suite refined: **166 tests (137 CI-safe, 29 local-only Tier 3 round-trips)**. Every tool has meaningful validation of script generation, response parsing, error paths, required-param validation, and injection-safe escaping. GitHub Actions CI (`fmt` + `clippy -D warnings` + `test --lib`) runs on every push/PR on `macos-latest`.
 
 | What | Status |
 |---|---|
@@ -22,9 +22,22 @@
 | Stickies (4 tools) | Done |
 | Shortcuts (3 tools) | Done |
 | Install script | Done |
-| Unit tests | 27 passing |
+| Unit tests (Tier 1 & 2) | 137 passing in CI (GitHub Actions, `macos-latest`) |
+| Integration tests (Tier 3) | 29 local-only tests (TCC-gated, 6 services with round-trip files) |
+| GitHub Actions CI | `fmt` + `clippy -D warnings` + `test --lib`, all green |
 
-**Remaining work:** Distribution polish (system tray, Homebrew, CI, DMG)
+**Remaining work:** Distribution polish (system tray, Homebrew formula, DMG).
+
+### Test Coverage
+
+The mocking foundation lives in `crates/macrelay-core/src/macos/applescript.rs`:
+- `ScriptRunner` trait abstracts AppleScript/JXA execution.
+- `MOCK_RUNNER` task-local override (via `tokio::task_local!`) lets tests inject scripted responses.
+- `current_runner()` falls back to the real `OsascriptRunner` outside test scopes.
+
+All 71 tools are covered by Tier 2 tests that **inspect the generated script content** to ensure correct command construction and argument escaping. Every tool also has error-path coverage (graceful handling when `osascript` fails) and required-parameter validation (missing args return `Ok(error_result(...))` instead of panicking). Injection-safe escape helpers (`escape_applescript_string`, `escape_jxa_string`, `escape_shell_single_quoted`) live in `crates/macrelay-core/src/macos/escape.rs` and are directly tested at Tier 1.
+
+Tier 1 (pure unit) and Tier 2 (script-inspecting mocks) are CI-safe and run on `macos-latest`. Tier 3 integration tests (`cargo test -- --ignored`) hit real Calendar/Notes/Mail/etc. on the maintainer's Mac and never run in CI. See [docs/TESTING.md](TESTING.md) for the full strategy.
 
 ## 1. Overview
 
@@ -35,7 +48,7 @@ MacRelay is an open-source MCP (Model Context Protocol) server for macOS that gi
 1. **Feature parity with MacUse** - 71 tools across 13 services (DONE)
 2. **Non-technical user experience** - Setup script today, DMG + system tray planned for Phase 4
 3. **100% local** - No cloud, no telemetry, no subscriptions
-4. **Tested and reliable** - Unit tests per service, E2E harness planned for Phase 2
+4. **Tested and reliable** - Three-tier strategy (pure unit → script-inspecting mocks → real-app integration). All tools covered by meaningful tests.
 5. **Easy to contribute to** - Self-contained service modules, standard Rust toolchain
 
 ## 3. What We Learned from Dissecting MacUse
