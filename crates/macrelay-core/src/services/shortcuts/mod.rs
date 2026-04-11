@@ -116,9 +116,10 @@ fn handler_shortcuts_get() -> ToolHandler {
 
             let escaped_name = name.replace('\'', "'\\''");
 
+            // `|| true` keeps exit 0 when grep finds no matches, so a missing
+            // shortcut returns empty output instead of bubbling up as an error.
             let script = format!(
-                r#"do shell script "/usr/bin/shortcuts list | grep -i '{}' 2>&1""#,
-                escaped_name
+                r#"do shell script "/usr/bin/shortcuts list 2>&1 | grep -i '{escaped_name}' || true""#
             );
 
             match crate::macos::applescript::run_applescript(&script) {
@@ -134,18 +135,7 @@ fn handler_shortcuts_get() -> ToolHandler {
                         )))
                     }
                 }
-                Err(e) => {
-                    // grep returns exit code 1 when no match is found,
-                    // which AppleScript treats as an error
-                    let err_str = format!("{e}");
-                    if err_str.contains("exit code") || err_str.contains("status 1") {
-                        Ok(text_result(format!(
-                            "No shortcut found matching: {name}"
-                        )))
-                    } else {
-                        Ok(error_result(format!("Failed to get shortcut: {e}")))
-                    }
-                }
+                Err(e) => Ok(error_result(format!("Failed to get shortcut: {e}"))),
             }
         })
     })

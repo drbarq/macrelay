@@ -451,11 +451,17 @@ fn handler_capture_snapshot() -> ToolHandler {
                     let escaped_name = name.replace('"', "\\\"");
 
                     // First, get the window ID via AppleScript, then use screencapture.
+                    // Wrap in try/on error so apps with no visible window get a
+                    // graceful message instead of a raw -1719 "Invalid index".
                     let id_script = format!(
                         r#"
 tell application "System Events"
-    set wid to id of first window of process "{escaped_name}"
-    return wid as text
+    try
+        set wid to id of first window of process "{escaped_name}"
+        return wid as text
+    on error
+        return "ERROR:No visible window for application \"{escaped_name}\"."
+    end try
 end tell
 "#
                     );
@@ -463,6 +469,9 @@ end tell
                     match crate::macos::applescript::run_applescript(&id_script) {
                         Ok(window_id) => {
                             let wid = window_id.trim();
+                            if let Some(err) = wid.strip_prefix("ERROR:") {
+                                return Ok(error_result(err.to_string()));
+                            }
                             let capture_script = format!(
                                 r#"do shell script "screencapture -l {} -o -x {}""#,
                                 wid, output_path

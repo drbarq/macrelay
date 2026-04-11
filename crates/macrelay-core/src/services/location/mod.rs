@@ -24,12 +24,13 @@ pub fn register(registry: &mut ServiceRegistry) {
 fn handler_get_current() -> ToolHandler {
     Arc::new(|_args| {
         Box::pin(async move {
-            // Use a Swift snippet executed via `do shell script` in AppleScript.
-            // CoreLocation requires a run loop to deliver delegate callbacks.
-            // We compile and run a small Swift program that requests a single
-            // location update and prints "lat,lng,accuracy" on success.
-            let swift_code = r#"
-import CoreLocation
+            // CoreLocation requires a run loop to deliver delegate callbacks,
+            // so we run a small Swift program that requests a single update
+            // and prints "lat,lng,accuracy". Writing to a temp file avoids the
+            // nested AppleScript -> shell -> Swift quoting nightmare that
+            // broke the previous implementation (the Swift `\(...)` string
+            // interpolation syntax made shell choke on unmatched parens).
+            let swift_code = r#"import CoreLocation
 import Foundation
 
 class Delegate: NSObject, CLLocationManagerDelegate {
@@ -59,45 +60,59 @@ if let loc = delegate.location {
 }
 "#;
 
-            // Escape the Swift code for embedding in an AppleScript `do shell script`
-            let escaped_swift = swift_code
-                .replace('\\', "\\\\")
-                .replace('"', "\\\"");
+            let temp_path = std::env::temp_dir()
+                .join(format!("macrelay-location-{}.swift", std::process::id()));
 
-            let script = format!(
-                r#"do shell script "/usr/bin/swift -e \"{}\"" "#,
-                escaped_swift.replace('\n', "\\n")
-            );
+            if let Err(e) = std::fs::write(&temp_path, swift_code) {
+                return Ok(error_result(format!(
+                    "Failed to write location helper script: {e}"
+                )));
+            }
 
-            match crate::macos::applescript::run_applescript(&script) {
-                Ok(output) => {
-                    let trimmed = output.trim();
-                    if trimmed.starts_with("ERROR:") {
-                        Ok(error_result(trimmed.to_string()))
-                    } else {
-                        let parts: Vec<&str> = trimmed.split(',').collect();
-                        if parts.len() == 3 {
-                            let result = json!({
-                                "latitude": parts[0].trim().parse::<f64>().unwrap_or(0.0),
-                                "longitude": parts[1].trim().parse::<f64>().unwrap_or(0.0),
-                                "accuracy_meters": parts[2].trim().parse::<f64>().unwrap_or(-1.0),
-                            });
-                            Ok(text_result(
-                                serde_json::to_string_pretty(&result)
-                                    .unwrap_or_else(|_| trimmed.to_string()),
-                            ))
-                        } else {
-                            Ok(error_result(format!(
-                                "Unexpected location output: {trimmed}"
-                            )))
-                        }
-                    }
+            let output = std::process::Command::new("/usr/bin/swift")
+                .arg(&temp_path)
+                .output();
+
+            let _ = std::fs::remove_file(&temp_path);
+
+            let output = match output {
+                Ok(o) => o,
+                Err(e) => {
+                    return Ok(error_result(format!(
+                        "Failed to run Swift location helper: {e}"
+                    )));
                 }
-                Err(e) => Ok(error_result(format!(
-                    "Failed to get current location: {e}. \
-                     CoreLocation may require a GUI application context or \
-                     Location Services may be disabled."
-                ))),
+            };
+
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                return Ok(error_result(format!(
+                    "Swift location helper exited with error: {stderr}"
+                )));
+            }
+
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let trimmed = stdout.trim();
+
+            if let Some(err) = trimmed.strip_prefix("ERROR:") {
+                return Ok(error_result(err.trim().to_string()));
+            }
+
+            let parts: Vec<&str> = trimmed.split(',').collect();
+            if parts.len() == 3 {
+                let result = json!({
+                    "latitude": parts[0].trim().parse::<f64>().unwrap_or(0.0),
+                    "longitude": parts[1].trim().parse::<f64>().unwrap_or(0.0),
+                    "accuracy_meters": parts[2].trim().parse::<f64>().unwrap_or(-1.0),
+                });
+                Ok(text_result(
+                    serde_json::to_string_pretty(&result)
+                        .unwrap_or_else(|_| trimmed.to_string()),
+                ))
+            } else {
+                Ok(error_result(format!(
+                    "Unexpected location output: {trimmed}"
+                )))
             }
         })
     })

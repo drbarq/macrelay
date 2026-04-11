@@ -470,8 +470,12 @@ fn handler_list_mailboxes() -> ToolHandler {
             let script = format!(
                 r#"
                 tell application "Mail"
+                    try
+                        set acct to account "{escaped_account}"
+                    on error
+                        return "ERROR:Account not found: {escaped_account}. Use mail_list_accounts to see available accounts."
+                    end try
                     set output to ""
-                    set acct to account "{escaped_account}"
                     set mboxes to every mailbox of acct
                     repeat with mb in mboxes
                         set mbName to name of mb
@@ -486,6 +490,9 @@ fn handler_list_mailboxes() -> ToolHandler {
 
             match crate::macos::applescript::run_applescript(&script) {
                 Ok(output) => {
+                    if let Some(err) = output.strip_prefix("ERROR:") {
+                        return Ok(error_result(err.to_string()));
+                    }
                     let mut results: Vec<serde_json::Value> = Vec::new();
                     for line in output.lines() {
                         let line = line.trim();
