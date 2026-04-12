@@ -271,15 +271,19 @@ The CI workflow on every push/PR runs `cargo fmt --check`, `cargo clippy -- -D w
 - [ ] System tray app (Tauri) with status indicator
 - [ ] DMG installer + code signing for non-technical users
 
+## Suggest Improvements
+
+Got an idea for a new tool, service, or feature? [Open an issue](https://github.com/drbarq/macrelay/issues/new?labels=product+improvement&title=Suggestion:+) with the **product improvement** label and tell me what you'd like to see. I read every one.
+
 ## Contributing
 
-Adding a new service is self-contained:
+Want to build it yourself? PRs are welcome. Adding a new service is self-contained:
 1. Create a module in `crates/macrelay-core/src/services/`
 2. Implement tools following the pattern in `calendar/mod.rs`
 3. Register in `services/mod.rs` and `macrelay-server/src/main.rs`
 4. Add tests (Tier 1 and Tier 2)
 
-See [docs/PRD.md](docs/PRD.md) for the full product requirements and technical details.
+All PRs require review approval and CI passing before merge. See [docs/PRD.md](docs/PRD.md) for the full product requirements and technical details.
 
 ## License
 
