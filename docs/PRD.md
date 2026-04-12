@@ -1,10 +1,10 @@
 # Product Requirements Document: MacRelay
 
-## Current Status (Updated 2026-04-10)
+## Current Status (Updated 2026-04-12)
 
-**All phases complete.**
+**v1.0.0 released.** All phases complete. Security audited.
 
-71 tools across 13 services. Test suite refined: **166 tests (137 CI-safe, 29 local-only Tier 3 round-trips)**. Every tool has meaningful validation of script generation, response parsing, error paths, required-param validation, and injection-safe escaping. GitHub Actions CI (`fmt` + `clippy -D warnings` + `test --lib`) runs on every push/PR on `macos-latest`.
+71 tools across 13 services. Test suite: **166 tests (137 CI-safe, 29 local-only Tier 3 round-trips)**. Multi-agent security audit completed — 9 injection vulnerabilities found and fixed (see [SECURITY_REPORT.md](/SECURITY_REPORT.md)). `cargo audit` reports 0 dependency vulnerabilities across 151 crates.
 
 | What | Status |
 |---|---|
@@ -25,8 +25,15 @@
 | Unit tests (Tier 1 & 2) | 137 passing in CI (GitHub Actions, `macos-latest`) |
 | Integration tests (Tier 3) | 29 local-only tests (TCC-gated, 6 services with round-trip files) |
 | GitHub Actions CI | `fmt` + `clippy -D warnings` + `test --lib`, all green |
+| Security audit | 9 vulnerabilities found and fixed, 0 dependency CVEs |
+| Distribution | GitHub Releases (universal binary), Homebrew (`drbarq/tap/macrelay`), source |
+| Version | 1.0.0 (MIT license) |
 
-**Remaining work:** Distribution polish (system tray, Homebrew formula, DMG).
+**Remaining work:** Menu bar app (tool toggles, status indicator), DMG installer, code signing.
+
+### Security
+
+All user inputs are escaped via dedicated helpers before embedding in AppleScript/JXA/shell commands. A multi-agent security audit (2026-04-12) reviewed all 71 tools across all 13 services, plus the escape functions themselves, SQL access patterns, and dependency tree. See [SECURITY_REPORT.md](/SECURITY_REPORT.md) for the full methodology and findings.
 
 ### Test Coverage
 

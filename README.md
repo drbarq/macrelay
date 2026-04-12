@@ -41,7 +41,7 @@ Everything runs 100% locally on your Mac. No data leaves your machine.
 
 ```bash
 mkdir -p ~/.local/bin && \
-curl -L https://github.com/drbarq/macrelay/releases/latest/download/macrelay-macos-universal \
+curl -L https://github.com/drbarq/macrelay/releases/download/v1.0.0/macrelay-macos-universal \
   -o ~/.local/bin/macrelay && chmod +x ~/.local/bin/macrelay
 ```
 
