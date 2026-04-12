@@ -31,18 +31,77 @@ jobs:
           lipo -create \
             target/x86_64-apple-darwin/release/macrelay \
             target/aarch64-apple-darwin/release/macrelay \
-            -output bin/macrelay-macos-universal
+            -output bin/macrelay
           lipo -create \
             target/x86_64-apple-darwin/release/macrelay-menubar \
             target/aarch64-apple-darwin/release/macrelay-menubar \
-            -output bin/macrelay-menubar-macos-universal
-          chmod +x bin/macrelay-macos-universal
-          chmod +x bin/macrelay-menubar-macos-universal
+            -output bin/macrelay-menubar
+          chmod +x bin/macrelay bin/macrelay-menubar
+
+      - name: Package App Bundle
+        run: |
+          APP_DIR="dist/MacRelay.app"
+          CONTENTS="${APP_DIR}/Contents"
+          VERSION="${GITHUB_REF_NAME#v}"
+
+          rm -rf "$APP_DIR"
+          mkdir -p "${CONTENTS}/MacOS" "${CONTENTS}/Resources"
+
+          # Binaries
+          cp bin/macrelay "${CONTENTS}/MacOS/macrelay"
+          cp bin/macrelay-menubar "${CONTENTS}/MacOS/macrelay-menubar"
+
+          # Icon
+          cp assets/macrelay.icns "${CONTENTS}/Resources/macrelay.icns"
+
+          # MCPB bundle
+          mkdir -p "${CONTENTS}/Resources/mcpb/server"
+          cp mcpb/manifest.json "${CONTENTS}/Resources/mcpb/manifest.json"
+          cp mcpb/icon.png "${CONTENTS}/Resources/mcpb/icon.png"
+          ln -s ../../../MacOS/macrelay "${CONTENTS}/Resources/mcpb/server/macrelay"
+
+          # Info.plist
+          cat > "${CONTENTS}/Info.plist" << PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleName</key>
+              <string>MacRelay</string>
+              <key>CFBundleDisplayName</key>
+              <string>MacRelay</string>
+              <key>CFBundleIdentifier</key>
+              <string>com.macrelay.app</string>
+              <key>CFBundleVersion</key>
+              <string>${VERSION}</string>
+              <key>CFBundleShortVersionString</key>
+              <string>${VERSION}</string>
+              <key>CFBundleExecutable</key>
+              <string>macrelay-menubar</string>
+              <key>CFBundleIconFile</key>
+              <string>macrelay</string>
+              <key>CFBundlePackageType</key>
+              <string>APPL</string>
+              <key>LSMinimumSystemVersion</key>
+              <string>14.0</string>
+              <key>LSUIElement</key>
+              <true/>
+              <key>NSHighResolutionCapable</key>
+              <true/>
+          </dict>
+          </plist>
+          PLIST
+
+          # Zip for Homebrew Cask
+          cd dist
+          zip -r MacRelay.zip MacRelay.app
+          cd ..
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
           files: |
-            bin/macrelay-macos-universal
-            bin/macrelay-menubar-macos-universal
+            bin/macrelay
+            bin/macrelay-menubar
+            dist/MacRelay.zip
