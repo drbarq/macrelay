@@ -128,7 +128,7 @@ Built in a single Claude Code session:
 | Total tokens | 113M (845k in, 283k out, 112.7M cached) |
 | Throughput | 103 tokens/sec (4.7 in, 98.6 out) |
 | Tools implemented | 71 |
-| Tests written | 166 |
+| Tests written | 197 |
 | Lines of Rust | ~8,000 |
 
 ## Performance

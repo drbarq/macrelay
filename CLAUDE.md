@@ -21,10 +21,12 @@ MacRelay is an open-source MCP server that gives AI assistants access to native 
 ```bash
 cargo build                    # Debug build
 cargo build --release          # Release build (~4MB binary)
-cargo test -p macrelay-core --lib                                  # 137 CI-safe tests
-cargo test -p macrelay-core --all-targets -- --include-ignored     # All 166 (includes Tier 3)
+cargo test -p macrelay-core --lib                                  # 137 CI-safe core tests
+cargo test -p macrelay-menubar                                     # 31 CI-safe menubar tests
+cargo test -p macrelay-core --all-targets -- --include-ignored     # All core tests (includes Tier 3)
 cargo fmt -- --check && cargo clippy --all-targets -- -D warnings  # CI gates
-bash scripts/setup-claude.sh   # Rebuild and refresh monolithic config
+bash scripts/build-app.sh     # Package MacRelay.app bundle
+bash scripts/uninstall.sh     # Clean uninstall (removes app, configs, extension)
 ```
 
 ## Tool Naming (Alphabetical Grouping)
@@ -50,8 +52,10 @@ Tools are prefixed by category to ensure they appear grouped in the UI:
 - `crates/macrelay-core/src/macos/` - applescript.rs, escape.rs, eventkit.rs
 - `crates/macrelay-core/src/registry.rs` - ServiceRegistry with alphabetical sorting
 - `crates/macrelay-core/src/permissions.rs` - Permission checking
+- `crates/macrelay-menubar/src/` - Menu bar app (config, process, launchagent, uninstall)
 - `crates/macrelay-server/src/main.rs` - MCP ServerHandler impl
-- `scripts/setup-claude.sh` - Install + configure
+- `scripts/build-app.sh` - Package MacRelay.app bundle
+- `scripts/uninstall.sh` - Clean uninstall
 
 ## Architecture Notes
 
