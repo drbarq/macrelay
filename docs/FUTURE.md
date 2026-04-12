@@ -132,15 +132,16 @@ Controlled shell command execution with safety guardrails.
 
 ## v2: Distribution
 
-| Feature | Description |
+| Feature | Status |
 |---|---|
-| **Homebrew** | `brew install macrelay` - tap + formula |
-| **System tray** | Tauri app with status indicator (green = running) |
-| **DMG installer** | Drag-to-Applications for non-technical users |
-| **Code signing** | Apple Developer certificate + notarization |
-| **Auto-update** | Sparkle framework or custom updater |
-| **GitHub Actions** | CI/CD: build universal binary, run tests, publish releases |
-| **LaunchAgent** | Auto-start on boot as background daemon |
+| **Homebrew Cask** | Done — `brew install --cask drbarq/tap/macrelay` |
+| **Menu bar app** | Done — pure Rust (tray-icon + muda + tao), service toggles, permissions view |
+| **GitHub Actions** | Done — CI + release workflow builds universal .app bundle |
+| **LaunchAgent** | Done — "Launch at Login" toggle in menu bar |
+| **Claude Desktop extension** | Done — installs with icon + manifest, no LOCAL DEV badge |
+| **DMG installer** | Future — drag-to-Applications for non-technical users |
+| **Code signing** | Future — Apple Developer certificate + notarization |
+| **Auto-update** | Future — Sparkle framework or custom updater |
 
 ## v2: Performance
 
@@ -187,7 +188,7 @@ Based on user value and implementation difficulty:
 
 ## Testing & Infrastructure (post-v1)
 
-Current state at v1.0: 166 tests (137 CI-safe Tier 1/2, 29 local-only Tier 3). GitHub Actions CI on `macos-latest` runs `fmt` + `clippy -D warnings` + `test --lib` on every push/PR. See [TESTING.md](TESTING.md) for the full strategy.
+Current state at v1.1: 197 tests (168 CI-safe Tier 1/2, 29 local-only Tier 3). GitHub Actions CI on `macos-latest` runs `fmt` + `clippy -D warnings` + tests for both `macrelay-core` and `macrelay-menubar` on every push/PR. See [TESTING.md](TESTING.md) for the full strategy.
 
 Possible additions:
 

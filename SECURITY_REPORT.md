@@ -122,5 +122,6 @@ After all fixes:
 - `cargo fmt -- --check` — pass
 - `cargo clippy --all-targets -- -D warnings` — pass
 - `cargo test -p macrelay-core --lib` — 137/137 pass
+- `cargo test -p macrelay-menubar` — 31/31 pass
 - `cargo audit` — 0 vulnerabilities
 - `grep -ri "mac-app-oss" crates/` — clean

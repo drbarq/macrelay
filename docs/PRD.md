@@ -4,7 +4,7 @@
 
 **v1.0.0 released.** All phases complete. Security audited.
 
-71 tools across 13 services. Test suite: **166 tests (137 CI-safe, 29 local-only Tier 3 round-trips)**. Multi-agent security audit completed — 9 injection vulnerabilities found and fixed (see [SECURITY_REPORT.md](/SECURITY_REPORT.md)). `cargo audit` reports 0 dependency vulnerabilities across 151 crates.
+71 tools across 13 services. Test suite: **197 tests (168 CI-safe, 29 local-only Tier 3 round-trips)**. Multi-agent security audit completed — 9 injection vulnerabilities found and fixed (see [SECURITY_REPORT.md](/SECURITY_REPORT.md)).
 
 | What | Status |
 |---|---|
@@ -26,10 +26,11 @@
 | Integration tests (Tier 3) | 29 local-only tests (TCC-gated, 6 services with round-trip files) |
 | GitHub Actions CI | `fmt` + `clippy -D warnings` + `test --lib`, all green |
 | Security audit | 9 vulnerabilities found and fixed, 0 dependency CVEs |
-| Distribution | GitHub Releases (universal binary), Homebrew (`drbarq/tap/macrelay`), source |
+| Menu bar app | Done — tray icon, service toggles, permissions view, Claude Desktop extension |
+| Distribution | Homebrew Cask (`brew install --cask drbarq/tap/macrelay`), GitHub Releases (.app bundle), source |
 | Version | 1.0.0 (MIT license) |
 
-**Remaining work:** Menu bar app (tool toggles, status indicator), DMG installer, code signing.
+**Remaining work:** DMG installer, code signing.
 
 ### Security
 
@@ -53,7 +54,7 @@ MacRelay is an open-source MCP (Model Context Protocol) server for macOS that gi
 ## 2. Goals
 
 1. **71 tools across 13 services** - Full native macOS app coverage (DONE)
-2. **Non-technical user experience** - Setup script today, DMG + system tray planned for Phase 4
+2. **Non-technical user experience** - Homebrew Cask install, menu bar app for configuration, DMG planned
 3. **100% local** - No cloud, no telemetry, no subscriptions
 4. **Tested and reliable** - Three-tier strategy (pure unit → script-inspecting mocks → real-app integration). All tools covered by meaningful tests.
 5. **Easy to contribute to** - Self-contained service modules, standard Rust toolchain

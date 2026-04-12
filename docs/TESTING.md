@@ -127,14 +127,17 @@ We need to extend Tier 3 to cover the remaining 11 services with the same round-
 
 **Where it runs:** Pre-release checklist on a clean macOS install. Cannot be automated.
 
-## Audit of current 166 tests
+## Audit of current 197 tests
 
 ```
 $ cargo test -p macrelay-core --lib
 test result: ok. 137 passed; 0 failed; 9 ignored; 0 measured; ~10s
 
+$ cargo test -p macrelay-menubar
+test result: ok. 31 passed; 0 failed; 0 ignored; 0 measured; ~0s
+
 $ cargo test -p macrelay-core --all-targets
-passed: 137  ignored: 29  total: 166
+passed: 137  ignored: 29  total: 166 (core only)
 ```
 
 | Tier | Count | Location | Status |
@@ -143,9 +146,10 @@ passed: 137  ignored: 29  total: 166
 | Tier 1 — pure helper unit tests (escape, key codes, date math) | ~10 | `src/macos/escape.rs`, `services/ui_controller`, `services/messages` | Done |
 | Tier 2 — script-inspecting mocks (happy path, error path, escape/injection, required-param) | ~113 | `src/services/*/mod.rs` | Done |
 | Tier 2 — `test_mock_runner` harness self-test | 1 | `src/macos/applescript.rs` | Keep |
+| Tier 2 — menu bar app (config writer, toggles, uninstall, plist, permissions) | 31 | `crates/macrelay-menubar/src/*.rs` | Done |
 | Tier 3 — `#[ignore]`d lib tests (CoreLocation, TCC, SQLite reads) | 9 | `src/services/*/mod.rs`, `src/macos/applescript.rs` | Local-only |
 | Tier 3 — `#[ignore]`d integration files (real-app round-trips) | 20 | `tests/{calendar,notes,reminders,mail,contacts,messages}_integration.rs` + `smoke_all_tools.rs` | Local-only |
-| **Tier 1 + Tier 2 (CI-safe)** | **137** | — | Runs on `macos-latest` GitHub Actions |
+| **Tier 1 + Tier 2 (CI-safe)** | **168** | — | Runs on `macos-latest` GitHub Actions |
 | **Tier 3 (`#[ignore]`d, local-only)** | **29** | — | Run with `cargo test -p macrelay-core --all-targets -- --include-ignored` |
 
 ## Current Coverage Report
@@ -167,6 +171,7 @@ This table provides a high-signal overview of what is validated for each service
 | **Stickies** | 4/4 tools | Mock-only | Automation (Stickies) |
 | **Shortcuts** | 3/3 tools | Mock-only | None |
 | **Permissions** | 1/1 tool | Real Check | None |
+| **Menu Bar App** | 31 tests | — | None (tempdir-based) |
 
 *Note: "Mock-only" means the tools are validated for script generation but haven't been added to the Tier 3 round-trip suite yet.*
 
@@ -184,7 +189,8 @@ GitHub Actions runs three gates on every push and PR, on `macos-latest`:
 
 1. `cargo fmt -- --check` — formatting must match rustfmt
 2. `cargo clippy --all-targets -- -D warnings` — lints are errors
-3. `cargo test -p macrelay-core --lib` — all 137 CI-safe tests must pass
+3. `cargo test -p macrelay-core --lib` — all 137 CI-safe core tests must pass
+4. `cargo test -p macrelay-menubar` — all 31 menubar tests must pass
 
 All three must be green. Tier 3 tests are gated behind `#[ignore]` and never run in CI — they require personal accounts and TCC-granted permissions, which CI does not have.
 
@@ -192,6 +198,7 @@ See the workflow definition at `.github/workflows/ci.yml`.
 
 Pre-release ritual (manual, on maintainer's Mac):
 1. `cargo test -p macrelay-core --all-targets -- --include-ignored` — runs all 29 Tier 3 tests (9 lib + 20 integration files)
+1. `cargo test -p macrelay-menubar` — all 31 menubar tests
 2. Manual exploratory pass through Claude Desktop / Claude Code against a couple of services, including a permission-denied scenario
 
 ## Rules going forward
