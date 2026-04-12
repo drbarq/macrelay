@@ -56,13 +56,21 @@ pub fn uninstall() -> Vec<String> {
     );
 
     // ── Homebrew cask ─────────────────────────────────────────────────
-    let brew_check = Command::new("brew")
+    // GUI apps don't have /opt/homebrew/bin in PATH, so try both locations
+    let brew_bin = if std::path::Path::new("/opt/homebrew/bin/brew").exists() {
+        "/opt/homebrew/bin/brew"
+    } else if std::path::Path::new("/usr/local/bin/brew").exists() {
+        "/usr/local/bin/brew"
+    } else {
+        "brew" // fallback to PATH lookup
+    };
+    let brew_check = Command::new(brew_bin)
         .args(["list", "--cask", "macrelay"])
         .output();
     if let Ok(output) = brew_check
         && output.status.success()
     {
-        let _ = Command::new("brew")
+        let _ = Command::new(brew_bin)
             .args(["uninstall", "--cask", "macrelay"])
             .output();
         actions.push("Uninstalled Homebrew cask".to_string());
