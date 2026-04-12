@@ -59,11 +59,24 @@ pub struct ServiceDef {
     pub label: &'static str,
 }
 
+/// The key used in mcpServers config. Capital M, capital R.
+const MCP_SERVER_KEY: &str = "MacRelay";
+
 /// Persisted preferences for the menu bar app.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MenuBarConfig {
     /// Which services are enabled (key -> enabled).
     pub services: BTreeMap<String, bool>,
+    /// Whether MacRelay is configured for Claude Desktop.
+    #[serde(default = "default_true")]
+    pub claude_desktop_enabled: bool,
+    /// Whether MacRelay is configured for Claude Code (global).
+    #[serde(default)]
+    pub claude_code_enabled: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 impl Default for MenuBarConfig {
@@ -72,7 +85,11 @@ impl Default for MenuBarConfig {
         for svc in SERVICES {
             services.insert(svc.key.to_string(), true);
         }
-        Self { services }
+        Self {
+            services,
+            claude_desktop_enabled: true,
+            claude_code_enabled: false,
+        }
     }
 }
 
@@ -131,9 +148,89 @@ impl MenuBarConfig {
         SERVICES.iter().all(|s| self.is_enabled(s.key))
     }
 
-    /// Write the Claude Desktop config to include macrelay with the right --service args.
-    pub fn write_claude_desktop_config(&self) {
-        self.write_claude_config_to_path(&claude_desktop_config_path(), &macrelay_binary_path());
+    /// Write configs for all enabled clients.
+    pub fn write_client_configs(&self) {
+        let binary = macrelay_binary_path();
+        // Claude Desktop: install as extension (gets icon, no LOCAL DEV badge)
+        if self.claude_desktop_enabled {
+            self.install_claude_desktop_extension(&binary);
+        } else {
+            uninstall_claude_desktop_extension();
+        }
+        // Claude Code: uses mcp.json config (no extension system)
+        if self.claude_code_enabled {
+            self.write_claude_config_to_path(&claude_code_config_path(), &binary);
+        } else {
+            remove_macrelay_from_config(&claude_code_config_path());
+        }
+    }
+
+    /// Install MacRelay as a Claude Desktop extension with icon and manifest.
+    fn install_claude_desktop_extension(&self, binary_path: &str) {
+        let ext_dir = claude_desktop_extension_dir();
+        let _ = std::fs::create_dir_all(&ext_dir);
+
+        // Write manifest with current binary path
+        let mut args_json = serde_json::json!([]);
+        if !self.all_enabled() {
+            let enabled = self.enabled_services();
+            if enabled.is_empty() {
+                // Nothing enabled — remove the extension entirely
+                uninstall_claude_desktop_extension();
+                return;
+            }
+            let mut args: Vec<String> = Vec::new();
+            for svc in &enabled {
+                args.push("--service".to_string());
+                args.push(svc.to_string());
+            }
+            args_json = serde_json::json!(args);
+        }
+
+        let manifest = serde_json::json!({
+            "manifest_version": "0.3",
+            "name": "MacRelay",
+            "display_name": "MacRelay",
+            "version": env!("CARGO_PKG_VERSION"),
+            "description": "Local, privacy-first MCP server for native macOS apps.",
+            "author": {
+                "name": "drbarq",
+                "url": "https://github.com/drbarq/macrelay"
+            },
+            "homepage": "https://github.com/drbarq/macrelay",
+            "license": "MIT",
+            "icon": "icon.png",
+            "server": {
+                "type": "binary",
+                "entry_point": "server/macrelay",
+                "mcp_config": {
+                    "command": binary_path,
+                    "args": args_json,
+                }
+            },
+            "compatibility": {
+                "claude_desktop": ">=0.10.0",
+                "platforms": ["darwin"]
+            }
+        });
+
+        if let Ok(json) = serde_json::to_string_pretty(&manifest) {
+            let _ = std::fs::write(ext_dir.join("manifest.json"), json);
+        }
+
+        // Copy icon from embedded asset (tight crop, fills the icon space)
+        let icon_bytes = include_bytes!("../../../assets/extension_icon.png");
+        let _ = std::fs::write(ext_dir.join("icon.png"), icon_bytes);
+
+        // Symlink the server binary so the extension can find it
+        let server_dir = ext_dir.join("server");
+        let _ = std::fs::create_dir_all(&server_dir);
+        let server_link = server_dir.join("macrelay");
+        let _ = std::fs::remove_file(&server_link);
+        let _ = std::os::unix::fs::symlink(binary_path, &server_link);
+
+        // Also remove any old config-based entry so we don't get duplicates
+        remove_macrelay_from_config(&claude_desktop_config_path());
     }
 
     /// Write Claude Desktop config to a specific path. Testable without touching real config.
@@ -165,7 +262,7 @@ impl MenuBarConfig {
             if enabled.is_empty() {
                 // Remove the entry entirely if nothing is enabled
                 if let Some(servers) = mcp_servers.as_object_mut() {
-                    servers.remove("macrelay");
+                    servers.remove(MCP_SERVER_KEY);
                 }
                 write_json_config(config_path, &config);
                 return;
@@ -182,7 +279,7 @@ impl MenuBarConfig {
         };
 
         if let Some(servers) = mcp_servers.as_object_mut() {
-            servers.insert("macrelay".to_string(), entry);
+            servers.insert(MCP_SERVER_KEY.to_string(), entry);
         }
 
         write_json_config(config_path, &config);
@@ -194,9 +291,48 @@ fn claude_desktop_config_path() -> PathBuf {
     PathBuf::from(home).join("Library/Application Support/Claude/claude_desktop_config.json")
 }
 
+const EXTENSION_DIR_NAME: &str = "com.macrelay.app";
+
+fn claude_desktop_extension_dir() -> PathBuf {
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+    PathBuf::from(home)
+        .join("Library/Application Support/Claude/Claude Extensions")
+        .join(EXTENSION_DIR_NAME)
+}
+
+/// Remove the Claude Desktop extension directory.
+pub fn uninstall_claude_desktop_extension() {
+    let ext_dir = claude_desktop_extension_dir();
+    let _ = std::fs::remove_dir_all(&ext_dir);
+}
+
+fn claude_code_config_path() -> PathBuf {
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+    PathBuf::from(home).join(".claude/mcp.json")
+}
+
 fn macrelay_binary_path() -> String {
+    // Prefer the binary inside the .app bundle if installed to /Applications
+    let app_path = "/Applications/MacRelay.app/Contents/MacOS/macrelay";
+    if std::path::Path::new(app_path).exists() {
+        return app_path.to_string();
+    }
     let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
     format!("{home}/.local/bin/macrelay")
+}
+
+/// Remove the macrelay entry from a client config file (preserving everything else).
+fn remove_macrelay_from_config(config_path: &PathBuf) {
+    let mut config: serde_json::Value = match std::fs::read_to_string(config_path) {
+        Ok(s) => serde_json::from_str(&s).unwrap_or(serde_json::json!({})),
+        Err(_) => return, // File doesn't exist, nothing to remove
+    };
+    if let Some(obj) = config.as_object_mut()
+        && let Some(servers) = obj.get_mut("mcpServers").and_then(|s| s.as_object_mut())
+    {
+        servers.remove(MCP_SERVER_KEY);
+    }
+    write_json_config(config_path, &config);
 }
 
 fn write_json_config(path: &PathBuf, value: &serde_json::Value) {
@@ -321,7 +457,7 @@ mod tests {
 
         let written: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
-        let macrelay = &written["mcpServers"]["macrelay"];
+        let macrelay = &written["mcpServers"]["MacRelay"];
         assert_eq!(macrelay["command"], "/usr/local/bin/macrelay");
         assert!(macrelay.get("args").is_none());
     }
@@ -338,7 +474,7 @@ mod tests {
 
         let written: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
-        let macrelay = &written["mcpServers"]["macrelay"];
+        let macrelay = &written["mcpServers"]["MacRelay"];
         assert_eq!(macrelay["command"], "/usr/local/bin/macrelay");
         let args: Vec<&str> = macrelay["args"]
             .as_array()
@@ -366,7 +502,7 @@ mod tests {
 
         let written: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
-        assert!(written["mcpServers"].get("macrelay").is_none());
+        assert!(written["mcpServers"].get("MacRelay").is_none());
     }
 
     #[test]
@@ -397,7 +533,7 @@ mod tests {
         );
         // macrelay added
         assert_eq!(
-            written["mcpServers"]["macrelay"]["command"],
+            written["mcpServers"]["MacRelay"]["command"],
             "/usr/local/bin/macrelay"
         );
         // preferences preserved
@@ -415,7 +551,7 @@ mod tests {
         let written: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
         assert_eq!(
-            written["mcpServers"]["macrelay"]["command"],
+            written["mcpServers"]["MacRelay"]["command"],
             "/usr/local/bin/macrelay"
         );
     }
@@ -432,7 +568,7 @@ mod tests {
         let written: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
         assert_eq!(
-            written["mcpServers"]["macrelay"]["command"],
+            written["mcpServers"]["MacRelay"]["command"],
             "/usr/local/bin/macrelay"
         );
     }
@@ -450,8 +586,56 @@ mod tests {
         let written: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
         assert_eq!(
-            written["mcpServers"]["macrelay"]["command"],
+            written["mcpServers"]["MacRelay"]["command"],
             "/usr/local/bin/macrelay"
         );
+    }
+
+    #[test]
+    fn remove_macrelay_preserves_other_entries() {
+        let dir = TempDir::new().unwrap();
+        let path = temp_config_path(&dir);
+        let existing = serde_json::json!({
+            "mcpServers": {
+                "MacRelay": {"command": "/usr/local/bin/macrelay"},
+                "other": {"command": "/usr/bin/other"},
+            },
+        });
+        std::fs::write(&path, serde_json::to_string_pretty(&existing).unwrap()).unwrap();
+
+        remove_macrelay_from_config(&path);
+
+        let written: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert!(written["mcpServers"].get("MacRelay").is_none());
+        assert_eq!(written["mcpServers"]["other"]["command"], "/usr/bin/other");
+    }
+
+    #[test]
+    fn remove_macrelay_noop_if_file_missing() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("does_not_exist.json");
+        // Should not panic or create a file
+        remove_macrelay_from_config(&path);
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn default_config_has_desktop_enabled_code_disabled() {
+        let config = MenuBarConfig::default();
+        assert!(config.claude_desktop_enabled);
+        assert!(!config.claude_code_enabled);
+    }
+
+    #[test]
+    fn client_flags_round_trip() {
+        let config = MenuBarConfig {
+            claude_code_enabled: true,
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&config).unwrap();
+        let loaded: MenuBarConfig = serde_json::from_str(&json).unwrap();
+        assert!(loaded.claude_desktop_enabled);
+        assert!(loaded.claude_code_enabled);
     }
 }

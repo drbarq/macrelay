@@ -59,56 +59,36 @@ I'd love to hear about the wonderful things you build with this. And I'd love to
 
 **Requirements:** macOS 14+ (Sonoma or later)
 
-### Option A: Pre-built binary (no Rust needed)
+### Option A: Homebrew (recommended)
 
 ```bash
-mkdir -p ~/.local/bin && \
-curl -L https://github.com/drbarq/macrelay/releases/download/v1.0.0/macrelay-macos-universal \
-  -o ~/.local/bin/macrelay && chmod +x ~/.local/bin/macrelay
+brew install --cask drbarq/tap/macrelay
 ```
 
-### Option B: Homebrew
+That's it. Three steps:
 
-```bash
-brew install drbarq/tap/macrelay
-```
+1. **Open MacRelay** from your Applications folder (or Spotlight search "MacRelay")
+2. **Enable in Claude Desktop** — open Claude Desktop Settings > Connectors, find MacRelay, toggle it on
+3. **Start chatting** — try *"What's on my calendar this week?"*
 
-### Option C: Build from source
+The MacRelay icon sits in your menu bar. From there you can toggle which services are enabled, check permission status, and manage your Claude Desktop/Code connections.
+
+### Option B: Build from source
 
 ```bash
 git clone https://github.com/drbarq/macrelay.git && cd macrelay
-bash scripts/setup-claude.sh
+bash scripts/build-app.sh
+cp -r dist/MacRelay.app /Applications/
+open /Applications/MacRelay.app
 ```
 
-### Configure your MCP client
+### Uninstall
 
-If you used Option A or B, add MacRelay to your MCP client config:
+Click **Uninstall MacRelay...** from the menu bar dropdown, or run:
 
-**Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json`):
-```json
-{
-  "mcpServers": {
-    "macrelay": {
-      "command": "~/.local/bin/macrelay"
-    }
-  }
-}
+```bash
+bash scripts/uninstall.sh
 ```
-
-**Claude Code** (`~/.claude/mcp.json`):
-```json
-{
-  "mcpServers": {
-    "macrelay": {
-      "command": "~/.local/bin/macrelay"
-    }
-  }
-}
-```
-
-Option C (build from source) auto-configures both clients via the setup script.
-
-Then restart your MCP client and try: *"What's on my calendar this week?"*
 
 ## Current Status
 

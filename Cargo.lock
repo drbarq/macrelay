@@ -1386,6 +1386,7 @@ name = "macrelay-menubar"
 version = "1.0.0"
 dependencies = [
  "image",
+ "libc",
  "macrelay-core",
  "muda",
  "serde",
