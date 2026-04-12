@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/macrelay-core",
     "crates/macrelay-server",
+    "crates/macrelay-menubar",
 ]
 
 [workspace.package]
