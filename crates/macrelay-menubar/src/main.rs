@@ -48,7 +48,7 @@ fn refresh_permissions(perm_items: &[MenuItem]) {
 
 /// Load the menu bar icon from the embedded PNG asset.
 fn load_icon() -> tray_icon::Icon {
-    let png_bytes = include_bytes!("../../../assets/menubar_v2_18.png");
+    let png_bytes = include_bytes!("../../../assets/menubar_v3_36.png");
     let img = image::load_from_memory(png_bytes).expect("Failed to decode menu bar icon");
     let rgba = img.into_rgba8();
     let (w, h) = (rgba.width(), rgba.height());
@@ -117,6 +117,7 @@ fn main() {
     // Create tray icon
     let _tray = TrayIconBuilder::new()
         .with_icon(load_icon())
+        .with_icon_as_template(true)
         .with_menu(Box::new(menu))
         .with_tooltip("MacRelay")
         .build()
