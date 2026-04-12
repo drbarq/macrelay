@@ -1,0 +1,22 @@
+[package]
+name = "macrelay-menubar"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "macrelay-menubar"
+path = "src/main.rs"
+
+[dependencies]
+macrelay-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tray-icon = "0.22"
+muda = "0.17"
+tao = "0.35"
+image = { version = "0.25", default-features = false, features = ["png"] }
+libc = "0.2"
+
+[dev-dependencies]
+tempfile = "3"

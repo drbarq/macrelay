@@ -1,11 +1,11 @@
 # MacRelay
 
 <p align="center">
-  <img src="assets/Logo-banner.png" alt="MacRelay" width="600">
+  <img src="assets/mac-relay-banner.png" alt="MacRelay" width="600">
 </p>
 
 [![CI](https://github.com/drbarq/macrelay/actions/workflows/ci.yml/badge.svg)](https://github.com/drbarq/macrelay/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/tests-137%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-161%20passing-brightgreen)
 ![Tools](https://img.shields.io/badge/tools-71%20across%2013%20services-blue)
 ![Platform](https://img.shields.io/badge/platform-macOS%2014%2B-lightgrey)
 ![Rust](https://img.shields.io/badge/rust-1.85%2B-orange)
@@ -51,7 +51,7 @@ This project is extremely exciting to me — and I hope it is to you too. But I 
 
 **You are giving AI access to everything you have access to.** Your calendar, your emails, your messages, your contacts, your notes, your files. It can click buttons, fill forms, and run shortcuts on your behalf. For some people, that's incredibly empowering. For others, it's terrifying. Both reactions are completely valid.
 
-Use the `--service` flag to enable only the tools you're comfortable with. Start small. See how it feels.
+Use the `--service` flag or the **menu bar app** to enable only the tools you're comfortable with. Start small. See how it feels.
 
 I'd love to hear about the wonderful things you build with this. And I'd love to hear about it if it nukes your machine. Either way, reach out — [hello@joetustin.com](mailto:hello@joetustin.com).
 
@@ -59,56 +59,36 @@ I'd love to hear about the wonderful things you build with this. And I'd love to
 
 **Requirements:** macOS 14+ (Sonoma or later)
 
-### Option A: Pre-built binary (no Rust needed)
+### Option A: Homebrew (recommended)
 
 ```bash
-mkdir -p ~/.local/bin && \
-curl -L https://github.com/drbarq/macrelay/releases/download/v1.0.0/macrelay-macos-universal \
-  -o ~/.local/bin/macrelay && chmod +x ~/.local/bin/macrelay
+brew install --cask drbarq/tap/macrelay
 ```
 
-### Option B: Homebrew
+That's it. Three steps:
 
-```bash
-brew install drbarq/tap/macrelay
-```
+1. **Open MacRelay** from your Applications folder (or Spotlight search "MacRelay")
+2. **Enable in Claude Desktop** — open Claude Desktop Settings > Connectors, find MacRelay, toggle it on
+3. **Start chatting** — try *"What's on my calendar this week?"*
 
-### Option C: Build from source
+The MacRelay icon sits in your menu bar. From there you can toggle which services are enabled, check permission status, and manage your Claude Desktop/Code connections.
+
+### Option B: Build from source
 
 ```bash
 git clone https://github.com/drbarq/macrelay.git && cd macrelay
-bash scripts/setup-claude.sh
+bash scripts/build-app.sh
+cp -r dist/MacRelay.app /Applications/
+open /Applications/MacRelay.app
 ```
 
-### Configure your MCP client
+### Uninstall
 
-If you used Option A or B, add MacRelay to your MCP client config:
+Click **Uninstall MacRelay...** from the menu bar dropdown, or run:
 
-**Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json`):
-```json
-{
-  "mcpServers": {
-    "macrelay": {
-      "command": "~/.local/bin/macrelay"
-    }
-  }
-}
+```bash
+bash scripts/uninstall.sh
 ```
-
-**Claude Code** (`~/.claude/mcp.json`):
-```json
-{
-  "mcpServers": {
-    "macrelay": {
-      "command": "~/.local/bin/macrelay"
-    }
-  }
-}
-```
-
-Option C (build from source) auto-configures both clients via the setup script.
-
-Then restart your MCP client and try: *"What's on my calendar this week?"*
 
 ## Current Status
 
@@ -117,7 +97,7 @@ Then restart your MCP client and try: *"What's on my calendar this week?"*
 | Metric | Value |
 |---|---|
 | Tools implemented | 71 |
-| Tests written | 166 (137 CI-safe, 29 local-only) |
+| Tests written | 190 (161 CI-safe, 29 local-only) |
 | Coverage | 13/13 services |
 | CI Status | passing (GitHub Actions) |
 
@@ -175,6 +155,12 @@ macrelay/
   crates/
     macrelay-server/                # MCP server binary (macrelay)
       src/main.rs                   # Entry point, ServerHandler impl
+    macrelay-menubar/               # Menu bar management app
+      src/
+        main.rs                     # Tray icon, event loop, menu dispatch
+        config.rs                   # Service toggles, Claude Desktop config writer
+        process.rs                  # Server process detection
+        launchagent.rs              # Launch at Login support
     macrelay-core/                  # Core library
       src/
         registry.rs                 # Service registry, tool routing
@@ -198,6 +184,7 @@ macrelay/
           eventkit.rs               # EventKit helpers
   scripts/
     setup-claude.sh                 # Build + install + configure
+    generate_icons.py               # Regenerate all icon assets from source
   docs/
     PRD.md                          # Full product requirements
     TESTING.md                      # Comprehensive testing strategy
@@ -232,12 +219,14 @@ Use the `permissions_status` tool to check all states at once.
 MacRelay uses a three-tier testing strategy (see [docs/TESTING.md](docs/TESTING.md) for the full strategy, audit, and per-service coverage report).
 
 ```bash
-# Run 137 CI-safe unit and mock-based tests (Tier 1 & 2), ~10s, no permissions
+# Run 161 CI-safe unit and mock-based tests (Tier 1 & 2), ~10s, no permissions
 cargo test -p macrelay-core --lib
+cargo test -p macrelay-menubar
 
-# Run all 166 tests including 29 local-only tests that hit real macOS apps (Tier 3)
+# Run all 190 tests including 29 local-only tests that hit real macOS apps (Tier 3)
 # WARNING: This will interact with your real Calendar/Notes/Mail/Reminders/Contacts.
 cargo test -p macrelay-core --all-targets -- --include-ignored
+cargo test -p macrelay-menubar
 ```
 
 | Tier | What it validates | Count | Runs in CI? |
@@ -246,7 +235,7 @@ cargo test -p macrelay-core --all-targets -- --include-ignored
 | **Tier 2** — Script-inspecting mocks | Every tool's generated AppleScript/JXA fragment + response parsing + error paths + required-param validation | ~117 | ✓ |
 | **Tier 3** — Real-app round-trips | End-to-end against real Calendar/Reminders/Notes/Mail/Contacts/Messages | 29 (`#[ignore]`d) | ✗ (maintainer's Mac only) |
 
-The CI workflow on every push/PR runs `cargo fmt --check`, `cargo clippy -- -D warnings`, and `cargo test -p macrelay-core --lib` on `macos-latest`. All three gates must pass.
+The CI workflow on every push/PR runs `cargo fmt --check`, `cargo clippy -- -D warnings`, and tests for both `macrelay-core` and `macrelay-menubar` on `macos-latest`. All gates must pass.
 
 ## Roadmap
 
@@ -255,7 +244,7 @@ The CI workflow on every push/PR runs `cargo fmt --check`, `cargo clippy -- -D w
 - [x] Phase 2: Notes + Mail + Messages + Location + Maps (30 tools)
 - [x] Phase 3: UI Viewer + UI Controller (16 tools)
 - [x] Phase 4: Stickies + Shortcuts (7 tools)
-- [x] Phase 5: Testing refinement (166 tests: 137 CI-safe, 29 local-only Tier 3 round-trips)
+- [x] Phase 5: Testing refinement (190 tests: 161 CI-safe, 29 local-only Tier 3 round-trips)
 - [x] Phase 6: GitHub Actions CI (fmt + clippy + tests on `macos-latest`)
 
 ### Future
@@ -272,7 +261,7 @@ The CI workflow on every push/PR runs `cargo fmt --check`, `cargo clippy -- -D w
 ### Future: Distribution
 - [x] Homebrew formula (`brew install drbarq/tap/macrelay`)
 - [x] GitHub Actions — universal binary releases on tag push
-- [ ] System tray app (Tauri) with status indicator
+- [x] Menu bar app — service toggles, permissions view, launch at login
 - [ ] DMG installer + code signing for non-technical users
 
 ## Suggest Improvements

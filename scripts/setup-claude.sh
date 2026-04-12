@@ -17,12 +17,21 @@ if [ ! -f "$BUILT_BINARY" ]; then
     exit 1
 fi
 
-# ── 2. Install the binary ───────────────────────────────────────────────────
+MENUBAR_BINARY_NAME="macrelay-menubar"
+MENUBAR_BUILT="target/release/$MENUBAR_BINARY_NAME"
+
+# ── 2. Install the binaries ─────────────────────────────────────────────────
 
 mkdir -p "$INSTALL_DIR"
 cp "$BUILT_BINARY" "$INSTALL_PATH"
 chmod +x "$INSTALL_PATH"
 echo "Installed $BINARY_NAME to $INSTALL_PATH"
+
+if [ -f "$MENUBAR_BUILT" ]; then
+    cp "$MENUBAR_BUILT" "$INSTALL_DIR/$MENUBAR_BINARY_NAME"
+    chmod +x "$INSTALL_DIR/$MENUBAR_BINARY_NAME"
+    echo "Installed $MENUBAR_BINARY_NAME to $INSTALL_DIR/$MENUBAR_BINARY_NAME"
+fi
 
 # ── Helper: upsert an MCP server entry ───────────────────────────────────────
 
