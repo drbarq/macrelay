@@ -12,7 +12,9 @@ cask "macrelay" do
   app "MacRelay.app"
 
   postflight do
-    # Launch the app after install so the menu bar icon appears
+    # Strip quarantine flag so Gatekeeper doesn't block unsigned app
+    system "xattr", "-cr", "#{appdir}/MacRelay.app"
+    # Launch the app so the menu bar icon appears
     system "open", "#{appdir}/MacRelay.app"
   end
 
