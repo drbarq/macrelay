@@ -53,6 +53,8 @@ Use the `--service` flag to enable only the tools you're comfortable with. Start
 
 I'd love to hear about the wonderful things you build with this. And I'd love to hear about it if it nukes your machine. Either way, reach out — [hello@joetustin.com](mailto:hello@joetustin.com).
 
+**TLDR: Claude + Mac Access = ????**
+
 ## Quick Start
 
 **Requirements:** macOS 14+ (Sonoma or later)
