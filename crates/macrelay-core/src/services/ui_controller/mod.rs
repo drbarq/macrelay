@@ -934,7 +934,8 @@ fn handler_manage_app() -> ToolHandler {
             let force = args.get("force").and_then(|v| v.as_bool()).unwrap_or(false);
 
             let escaped_app = escape_applescript_string(app_name);
-            let escaped_app_shell = escape_applescript_string(&escape_shell_single_quoted(app_name));
+            let escaped_app_shell =
+                escape_applescript_string(&escape_shell_single_quoted(app_name));
 
             let script = match action {
                 "open" => {

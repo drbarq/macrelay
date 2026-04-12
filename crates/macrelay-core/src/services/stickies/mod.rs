@@ -3,7 +3,9 @@ use std::sync::Arc;
 use rmcp::model::Tool;
 use serde_json::json;
 
-use crate::macos::escape::{escape_applescript_string, escape_jxa_string, escape_shell_single_quoted};
+use crate::macos::escape::{
+    escape_applescript_string, escape_jxa_string, escape_shell_single_quoted,
+};
 use crate::registry::{ServiceRegistry, ToolHandler, error_result, schema_from_json, text_result};
 
 /// Register all stickies tools with the service registry.

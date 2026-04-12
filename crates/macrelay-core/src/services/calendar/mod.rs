@@ -270,14 +270,20 @@ fn handler_create_event() -> ToolHandler {
             let start_ts: i64 = match args.get("start_date").and_then(|v| v.as_str()) {
                 Some(s) => match s.parse() {
                     Ok(n) => n,
-                    Err(_) => return Ok(error_result("start_date must be a Unix timestamp (integer)")),
+                    Err(_) => {
+                        return Ok(error_result(
+                            "start_date must be a Unix timestamp (integer)",
+                        ));
+                    }
                 },
                 None => return Ok(error_result("start_date is required")),
             };
             let end_ts: i64 = match args.get("end_date").and_then(|v| v.as_str()) {
                 Some(e) => match e.parse() {
                     Ok(n) => n,
-                    Err(_) => return Ok(error_result("end_date must be a Unix timestamp (integer)")),
+                    Err(_) => {
+                        return Ok(error_result("end_date must be a Unix timestamp (integer)"));
+                    }
                 },
                 None => return Ok(error_result("end_date is required")),
             };
@@ -337,7 +343,11 @@ fn handler_reschedule_event() -> ToolHandler {
             let new_start_ts: i64 = match args.get("new_start_date").and_then(|v| v.as_str()) {
                 Some(s) => match s.parse() {
                     Ok(n) => n,
-                    Err(_) => return Ok(error_result("new_start_date must be a Unix timestamp (integer)")),
+                    Err(_) => {
+                        return Ok(error_result(
+                            "new_start_date must be a Unix timestamp (integer)",
+                        ));
+                    }
                 },
                 None => return Ok(error_result("new_start_date is required")),
             };
@@ -345,7 +355,11 @@ fn handler_reschedule_event() -> ToolHandler {
             let new_end_ts: i64 = match args.get("new_end_date").and_then(|v| v.as_str()) {
                 Some(e) => match e.parse() {
                     Ok(n) => n,
-                    Err(_) => return Ok(error_result("new_end_date must be a Unix timestamp (integer)")),
+                    Err(_) => {
+                        return Ok(error_result(
+                            "new_end_date must be a Unix timestamp (integer)",
+                        ));
+                    }
                 },
                 None => return Ok(error_result("new_end_date is required")),
             };
@@ -555,7 +569,11 @@ fn handler_find_available_times() -> ToolHandler {
             let start_ts: i64 = match args.get("start_date").and_then(|v| v.as_str()) {
                 Some(s) => match s.parse() {
                     Ok(n) => n,
-                    Err(_) => return Ok(error_result("start_date must be a Unix timestamp (integer)")),
+                    Err(_) => {
+                        return Ok(error_result(
+                            "start_date must be a Unix timestamp (integer)",
+                        ));
+                    }
                 },
                 None => return Ok(error_result("start_date is required")),
             };
@@ -563,7 +581,9 @@ fn handler_find_available_times() -> ToolHandler {
             let end_ts: i64 = match args.get("end_date").and_then(|v| v.as_str()) {
                 Some(e) => match e.parse() {
                     Ok(n) => n,
-                    Err(_) => return Ok(error_result("end_date must be a Unix timestamp (integer)")),
+                    Err(_) => {
+                        return Ok(error_result("end_date must be a Unix timestamp (integer)"));
+                    }
                 },
                 None => return Ok(error_result("end_date is required")),
             };
