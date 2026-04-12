@@ -47,20 +47,15 @@ jobs:
           rm -rf "$APP_DIR"
           mkdir -p "${CONTENTS}/MacOS" "${CONTENTS}/Resources"
 
-          # Binaries
           cp bin/macrelay "${CONTENTS}/MacOS/macrelay"
           cp bin/macrelay-menubar "${CONTENTS}/MacOS/macrelay-menubar"
-
-          # Icon
           cp assets/macrelay.icns "${CONTENTS}/Resources/macrelay.icns"
 
-          # MCPB bundle
           mkdir -p "${CONTENTS}/Resources/mcpb/server"
           cp mcpb/manifest.json "${CONTENTS}/Resources/mcpb/manifest.json"
           cp mcpb/icon.png "${CONTENTS}/Resources/mcpb/icon.png"
           ln -s ../../../MacOS/macrelay "${CONTENTS}/Resources/mcpb/server/macrelay"
 
-          # Info.plist
           cat > "${CONTENTS}/Info.plist" << PLIST
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -92,7 +87,6 @@ jobs:
           </plist>
           PLIST
 
-          # Zip for Homebrew Cask
           cd dist
           zip -r MacRelay.zip MacRelay.app
           cd ..
@@ -105,3 +99,49 @@ jobs:
             bin/macrelay
             bin/macrelay-menubar
             dist/MacRelay.zip
+
+      - name: Update Homebrew Tap
+        env:
+          TAP_TOKEN: ${{ secrets.TAP_REPO_TOKEN }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          SHA256=$(shasum -a 256 dist/MacRelay.zip | awk '{print $1}')
+
+          git clone https://x-access-token:${TAP_TOKEN}@github.com/drbarq/homebrew-tap.git /tmp/homebrew-tap
+          cd /tmp/homebrew-tap
+
+          cat > Casks/macrelay.rb << CASK
+          cask "macrelay" do
+            version "${VERSION}"
+            sha256 "${SHA256}"
+
+            url "https://github.com/drbarq/macrelay/releases/download/v#{version}/MacRelay.zip"
+            name "MacRelay"
+            desc "Open-source MCP server for native macOS apps — with menu bar manager"
+            homepage "https://github.com/drbarq/macrelay"
+
+            depends_on macos: ">= :sonoma"
+
+            app "MacRelay.app"
+
+            postflight do
+              system "xattr", "-cr", "#{appdir}/MacRelay.app"
+              system "open", "#{appdir}/MacRelay.app"
+            end
+
+            uninstall quit: "com.macrelay.app"
+
+            zap trash: [
+              "~/Library/Application Support/MacRelay",
+              "~/Library/LaunchAgents/com.macrelay.menubar.plist",
+              "~/Library/Application Support/Claude/Claude Extensions/com.macrelay.app",
+              "~/Library/Application Support/Claude/Claude Extensions Settings/com.macrelay.app.json",
+            ]
+          end
+          CASK
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Casks/macrelay.rb
+          git commit -m "Bump MacRelay to v${VERSION}"
+          git push
