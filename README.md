@@ -259,6 +259,16 @@ The CI workflow on every push/PR runs `cargo fmt --check`, `cargo clippy -- -D w
 - [ ] System tray app (Tauri) with status indicator
 - [ ] DMG installer + code signing for non-technical users
 
+## A Note from Joe
+
+This project is extremely exciting to me — and I hope it is to you too. But I want to be upfront:
+
+**You are giving AI access to everything you have access to.** Your calendar, your emails, your messages, your contacts, your notes, your files. It can click buttons, fill forms, and run shortcuts on your behalf. For some people, that's incredibly empowering. For others, it's terrifying. Both reactions are completely valid.
+
+Use the `--service` flag to enable only the tools you're comfortable with. Start small. See how it feels.
+
+I'd love to hear about the wonderful things you build with this. And I'd love to hear about it if it nukes your machine. Either way, reach out — [hello@joetustin.com](mailto:hello@joetustin.com).
+
 ## Contributing
 
 Adding a new service is self-contained:
