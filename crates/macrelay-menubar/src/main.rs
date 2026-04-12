@@ -9,7 +9,6 @@ use std::time::{Duration, Instant};
 
 use config::{MenuBarConfig, SERVICES};
 use launchagent::{disable_launch_at_login, enable_launch_at_login, is_launch_at_login_enabled};
-use macrelay_core::permissions::{PermissionManager, PermissionStatus, PermissionType};
 use muda::{CheckMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
 use process::{is_macrelay_running, status_text};
 use tao::event::{Event, StartCause};
@@ -19,47 +18,45 @@ use tray_icon::TrayIconBuilder;
 
 const REFRESH_INTERVAL: Duration = Duration::from_secs(5);
 
-const PERMISSION_ORDER: [PermissionType; 7] = [
-    PermissionType::Accessibility,
-    PermissionType::ScreenRecording,
-    PermissionType::FullDiskAccess,
-    PermissionType::Calendar,
-    PermissionType::Reminders,
-    PermissionType::Contacts,
-    PermissionType::Location,
+/// Permission entries for the menu. Each maps to a System Settings pane.
+const PERMISSION_ENTRIES: &[PermissionEntry] = &[
+    PermissionEntry {
+        label: "Accessibility — UI automation tools",
+        pane: "Privacy_Accessibility",
+    },
+    PermissionEntry {
+        label: "Full Disk Access — Messages search",
+        pane: "Privacy_AllFiles",
+    },
+    PermissionEntry {
+        label: "Calendars — Calendar tools",
+        pane: "Privacy_Calendars",
+    },
+    PermissionEntry {
+        label: "Reminders — Reminder tools",
+        pane: "Privacy_Reminders",
+    },
+    PermissionEntry {
+        label: "Contacts — Contact tools",
+        pane: "Privacy_Contacts",
+    },
+    PermissionEntry {
+        label: "Location Services — Location tool",
+        pane: "Privacy_LocationServices",
+    },
+    PermissionEntry {
+        label: "Automation — Mail, Notes, Stickies",
+        pane: "Privacy_Automation",
+    },
 ];
 
-fn format_permission_label(perm_type: PermissionType, status: PermissionStatus) -> String {
-    let icon = match status {
-        PermissionStatus::Granted => "✓",
-        PermissionStatus::Denied => "✗",
-        PermissionStatus::NotDetermined | PermissionStatus::Unknown => "?",
-    };
-    format!("{icon}  {perm_type}")
+struct PermissionEntry {
+    label: &'static str,
+    pane: &'static str,
 }
 
-fn refresh_permissions(perm_items: &[MenuItem]) {
-    let statuses = PermissionManager::check_all();
-    for (i, perm_type) in PERMISSION_ORDER.iter().enumerate() {
-        let status = statuses
-            .get(perm_type)
-            .copied()
-            .unwrap_or(PermissionStatus::Unknown);
-        perm_items[i].set_text(format_permission_label(*perm_type, status));
-    }
-}
-
-/// Open System Settings to the Privacy & Security pane for a permission type.
-fn open_permission_settings(perm_type: PermissionType) {
-    let pane = match perm_type {
-        PermissionType::Accessibility => "Privacy_Accessibility",
-        PermissionType::ScreenRecording => "Privacy_ScreenCapture",
-        PermissionType::FullDiskAccess => "Privacy_AllFiles",
-        PermissionType::Calendar => "Privacy_Calendars",
-        PermissionType::Reminders => "Privacy_Reminders",
-        PermissionType::Contacts => "Privacy_Contacts",
-        PermissionType::Location => "Privacy_LocationServices",
-    };
+/// Open System Settings to a specific Privacy & Security pane.
+fn open_settings_pane(pane: &str) {
     let url = format!("x-apple.systempreferences:com.apple.preference.security?{pane}");
     let _ = Command::new("open").arg(&url).spawn();
 }
@@ -124,18 +121,16 @@ fn main() {
     clients_submenu.append(&claude_code_item).unwrap();
     menu.append(&clients_submenu).unwrap();
 
-    // Permissions submenu with live status (clickable to open System Settings)
+    // Permissions submenu — guide to required permissions, click to open System Settings
     let permissions_submenu = Submenu::new("Permissions", true);
-    let mut perm_items: Vec<MenuItem> = Vec::new();
-    let mut perm_ids: HashMap<muda::MenuId, PermissionType> = HashMap::new();
-    for perm_type in &PERMISSION_ORDER {
-        let label = format_permission_label(*perm_type, PermissionStatus::Unknown);
-        let item = MenuItem::new(&label, true, None);
-        perm_ids.insert(item.id().clone(), *perm_type);
+    let hint = MenuItem::new("  Grant in System Settings:", false, None);
+    permissions_submenu.append(&hint).unwrap();
+    let mut perm_ids: HashMap<muda::MenuId, &str> = HashMap::new();
+    for entry in PERMISSION_ENTRIES {
+        let item = MenuItem::new(entry.label, true, None);
+        perm_ids.insert(item.id().clone(), entry.pane);
         permissions_submenu.append(&item).unwrap();
-        perm_items.push(item);
     }
-    refresh_permissions(&perm_items);
     menu.append(&permissions_submenu).unwrap();
 
     menu.append(&PredefinedMenuItem::separator()).unwrap();
@@ -175,7 +170,6 @@ fn main() {
                 app_config.write_client_configs();
             }
             Event::NewEvents(StartCause::ResumeTimeReached { .. }) => {
-                refresh_permissions(&perm_items);
                 let running = is_macrelay_running();
                 status_item.set_text(status_text(running));
             }
@@ -221,9 +215,9 @@ fn main() {
                 return;
             }
 
-            // Permission items — open System Settings
-            if let Some(perm_type) = perm_ids.get(&menu_event.id) {
-                open_permission_settings(*perm_type);
+            // Permission items — open System Settings to the right pane
+            if let Some(pane) = perm_ids.get(&menu_event.id) {
+                open_settings_pane(pane);
                 return;
             }
 
@@ -241,30 +235,24 @@ mod tests {
     use super::*;
 
     #[test]
-    fn format_permission_label_granted() {
-        let label =
-            format_permission_label(PermissionType::Accessibility, PermissionStatus::Granted);
-        assert!(label.starts_with("✓"));
-        assert!(label.contains("Accessibility"));
+    fn permission_entries_have_labels_and_panes() {
+        assert!(!PERMISSION_ENTRIES.is_empty());
+        for entry in PERMISSION_ENTRIES {
+            assert!(!entry.label.is_empty());
+            assert!(entry.pane.starts_with("Privacy_"));
+        }
     }
 
     #[test]
-    fn format_permission_label_denied() {
-        let label = format_permission_label(PermissionType::Calendar, PermissionStatus::Denied);
-        assert!(label.starts_with("✗"));
-        assert!(label.contains("Calendar"));
-    }
-
-    #[test]
-    fn format_permission_label_unknown() {
-        let label =
-            format_permission_label(PermissionType::Location, PermissionStatus::NotDetermined);
-        assert!(label.starts_with("?"));
-        assert!(label.contains("Location"));
-    }
-
-    #[test]
-    fn permission_order_covers_all_types() {
-        assert_eq!(PERMISSION_ORDER.len(), 7);
+    fn permission_entries_cover_key_categories() {
+        let labels: Vec<&str> = PERMISSION_ENTRIES.iter().map(|e| e.label).collect();
+        let all = labels.join(" ");
+        assert!(all.contains("Accessibility"));
+        assert!(all.contains("Full Disk Access"));
+        assert!(all.contains("Calendar"));
+        assert!(all.contains("Reminders"));
+        assert!(all.contains("Contacts"));
+        assert!(all.contains("Location"));
+        assert!(all.contains("Automation"));
     }
 }
