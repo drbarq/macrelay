@@ -2,7 +2,7 @@
 
 ## Current Status (Updated 2026-04-10)
 
-**All phases complete. Feature parity with MacUse achieved.**
+**All phases complete.**
 
 71 tools across 13 services. Test suite refined: **166 tests (137 CI-safe, 29 local-only Tier 3 round-trips)**. Every tool has meaningful validation of script generation, response parsing, error paths, required-param validation, and injection-safe escaping. GitHub Actions CI (`fmt` + `clippy -D warnings` + `test --lib`) runs on every push/PR on `macos-latest`.
 
@@ -41,131 +41,25 @@ Tier 1 (pure unit) and Tier 2 (script-inspecting mocks) are CI-safe and run on `
 
 ## 1. Overview
 
-MacRelay is an open-source MCP (Model Context Protocol) server for macOS that gives AI assistants access to native Mac apps and universal UI control. It replaces the closed-source MacUse app ($39, macuse.app) with a fully local, privacy-first, open-source alternative.
+MacRelay is an open-source MCP (Model Context Protocol) server for macOS that gives AI assistants access to native Mac apps and universal UI control. Fully local, privacy-first, no cloud, no subscriptions, no telemetry.
 
 ## 2. Goals
 
-1. **Feature parity with MacUse** - 71 tools across 13 services (DONE)
+1. **71 tools across 13 services** - Full native macOS app coverage (DONE)
 2. **Non-technical user experience** - Setup script today, DMG + system tray planned for Phase 4
 3. **100% local** - No cloud, no telemetry, no subscriptions
 4. **Tested and reliable** - Three-tier strategy (pure unit → script-inspecting mocks → real-app integration). All tools covered by meaningful tests.
 5. **Easy to contribute to** - Self-contained service modules, standard Rust toolchain
 
-## 3. What We Learned from Dissecting MacUse
+## 3. Technical Approach
 
-We extracted the complete architecture from the installed MacUse binary (v1.7.3):
+MacRelay uses three main patterns to interact with native macOS apps:
 
-### 3.1 MacUse Tech Stack
-- **Framework:** Rust + Tauri v2 (not Swift as the website implies)
-- **MCP Library:** `rmcp` crate v0.17.0
-- **MCP Protocol:** Versions 2025-06-18 and 2025-11-25
-- **Transport:** Streamable HTTP (primary, background daemon) + stdio
-- **Licensing:** Keygen.rs (tauri_plugin_keygen_rs2)
-- **Analytics:** PostHog + Sentry (we will NOT include these)
-- **Auto-update:** Sparkle framework
-- **Internal DB:** SQLite (data.db with WAL mode) for OAuth, settings, usage tracking
-- **Bundle ID:** studio.techflow.macuse
+- **AppleScript/JXA** — Calendar, Reminders, Contacts, Mail (compose/send), Notes (write), Messages (send), Stickies (create). Executed via `osascript` with injection-safe escaping.
+- **SQLite (read-only)** — Messages (`chat.db`), Notes (`NoteStore.sqlite`), Mail (`Envelope Index`). Direct reads are faster than AppleScript and avoid automation prompts.
+- **Accessibility API** — UI Viewer and UI Controller use `AXUIElement` for tree inspection and `CGEvent` for mouse/keyboard input. Elements get short ref IDs (B1, T1, S1).
 
-### 3.2 MacUse Source Structure (from module paths in binary)
-```
-src/
-  cli/mcp/
-    server.rs, bridge.rs, oauth.rs
-  services/
-    analytics.rs
-    api_key/service.rs
-    event_bus.rs
-    license.rs
-    mcp_client/claude.rs
-    mcp_server/
-      config.rs, service.rs, permissions.rs, registry.rs
-      compact_mode/types.rs
-      http_service.rs
-      legacy_sse/handlers.rs
-      oauth/{registration, token, authorize, revoke}.rs
-      servers/
-        common/app_reference.rs
-        calendar/{service, types}.rs
-        contacts/
-        location/
-        map/{service, types}.rs
-        mail/
-        messages/{types}.rs
-        notes/
-        reminders/{types}.rs
-        shortcuts/
-        stickies/{error, responses, service, types}.rs
-        ui_controller/{types, validation, diff}.rs
-    oauth/{metadata_client, service, store}.rs
-    onboarding.rs, panel.rs, updater.rs
-  macos/
-    accessibility/input/activation.rs
-    contacts/store.rs
-    eventkit/executor.rs
-    messages/auth.rs
-    stickies/{auth, jxa/executor, reader, rtf, types}.rs
-  store/migrations/{v2..v9}.rs
-  utils/icon.rs
-  api/handlers/{mcp_client, oauth, api_key}.rs
-  api/events.rs
-  ability/{plan, rule, action, limits, ability, subject}.rs
-  plugins/posthog.rs
-  di/initialization.rs
-```
-
-### 3.3 MacUse Data Access Patterns
-
-**Calendar & Reminders:** EventKit framework via EKEventStore with TTL caching. Deep links to open in native apps (ical://, x-apple-reminderkit://).
-
-**Contacts:** CNContactStore with TTL caching. Listens for CNContactStoreDidChangeNotification to invalidate cache.
-
-**Messages:** Direct SQLite access to ~/Library/Messages/chat.db. Queries join message, handle, and chat_message_join tables. Sends via AppleScript automation of Messages.app.
-
-**Mail:** SQLite access to ~/Library/Mail/V10/MailData/Envelope Index for search/read. AppleScript for compose, reply, forward, move, delete. Requires Full Disk Access.
-
-**Notes:** SQLite access to ~/Library/Group Containers/group.com.apple.notes/NoteStore.sqlite for reads (ZPLAINTEXT column for search). AppleScript for creates/updates (writing SQLite would corrupt sync).
-
-**Location:** CoreLocation via CLLocationManager.
-
-**Maps:** MapKit via MKLocalSearch and MKDirections.
-
-**Stickies:** RTFD file reader for listing/reading. JXA scripts (create_sticky.js, delete_sticky.js, open_stickies.js) for automation.
-
-**UI Automation:** macOS Accessibility API for tree inspection. XPath for element querying. CGEvent for mouse/keyboard input. Returns UI diffs after actions. Elements get short ref IDs (B1, T1, S1).
-
-### 3.4 MacUse MCP Client Auto-Configuration
-
-MacUse detects and auto-configures these MCP clients:
-- Claude Desktop (com.anthropic.claudefordesktop) - Downloads and installs .mcpb bundle
-- Cursor (com.todesktop.230313mzl4w4u92) - Opens via deeplink
-- VS Code (com.microsoft.VSCode) - Configures user MCP settings
-- Raycast (com.raycast.macos) - Opens via deeplink
-- Goose - Configures ~/.config/goose/config.yaml
-- ChatWise (app.chatwise) - Opens via deeplink
-- LM Studio (ai.elementlabs.lmstudio) - Opens via deeplink
-- Msty Studio - Opens setup guide
-- Perplexity (ai.perplexity.mac) - Opens setup guide
-- AnythingLLM (com.anythingllm) - Configures MCP servers
-
-### 3.5 MacUse Permission Model
-
-Permissions checked at tool-call time with human-readable error messages:
-- Calendar: EKEventStore.requestFullAccessToEvents()
-- Reminders: EKEventStore.requestFullAccessToReminders()
-- Contacts: CNContactStore.requestAccess()
-- Location: CLLocationManager.requestAlwaysAuthorization()
-- Accessibility: AXIsProcessTrustedWithOptions (manual grant)
-- Screen Recording: CGRequestScreenCaptureAccess() (manual grant)
-- Full Disk Access: Detected via file access attempt (manual grant)
-- Automation (per-app): NSAppleEventDescriptor (prompted per target app)
-
-### 3.6 MacUse Licensing & Usage Tracking
-
-Free tier: 100 tool calls/day, 1 connected client. Lifetime: $39, unlimited.
-
-Internal SQLite tracks: daily tool calls, connected clients, OAuth tokens, API keys. Has migration system (v2 through v9).
-
-We will NOT implement usage limits, licensing, or usage tracking.
+Additional integrations: CoreLocation (via Swift subprocess) for location, `/usr/bin/shortcuts` for Siri Shortcuts, RTFD file reader for Stickies.
 
 ## 4. Complete Tool Specifications
 
@@ -332,6 +226,6 @@ All UI controller tools return a **UI diff** showing what changed after the acti
 - Usage tracking or rate limiting
 - Licensing or payment system
 - Cloud sync or remote access
-- OAuth server (MacUse has this for remote MCP; we only need local)
+- OAuth server
 - Analytics or crash reporting
 - Auto-update (users update via Homebrew or DMG download)

@@ -1,6 +1,6 @@
 # MacRelay: Future Roadmap
 
-What comes after feature parity with MacUse. These are ideas for v2 and beyond - services that no Mac MCP server offers today.
+Ideas for v2 and beyond — services that no Mac MCP server offers today.
 
 ## v2: New Services
 

@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-MacRelay is an open-source MCP server that relays AI commands to native macOS apps. It's a local, privacy-first replacement for MacUse (macuse.app, $39).
+MacRelay is an open-source MCP server that gives AI assistants access to native macOS apps. Local, privacy-first, no cloud.
 
 **Current state:** Feature complete. 71 tools across 13 services. All tools use full category prefixes (e.g., `communication_mail_...`) for perfect alphabetical grouping in Claude Desktop.
 

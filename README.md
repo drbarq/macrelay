@@ -1,5 +1,9 @@
 # MacRelay
 
+<p align="center">
+  <img src="assets/Logo-banner.png" alt="MacRelay" width="600">
+</p>
+
 [![CI](https://github.com/drbarq/macrelay/actions/workflows/ci.yml/badge.svg)](https://github.com/drbarq/macrelay/actions/workflows/ci.yml)
 ![Tests](https://img.shields.io/badge/tests-137%20passing-brightgreen)
 ![Tools](https://img.shields.io/badge/tools-71%20across%2013%20services-blue)
@@ -9,7 +13,7 @@
 
 Open-source MCP server that relays your AI's commands to native macOS apps.
 
-A local, privacy-first replacement for [MacUse](https://macuse.app) ($39) that works with Claude Desktop, Cursor, Claude Code, and any MCP-compatible client. No cloud, no subscriptions, no telemetry.
+Local, privacy-first, open-source. Works with Claude Desktop, Cursor, Claude Code, and any MCP-compatible client. No cloud, no subscriptions, no telemetry.
 
 ## What It Does
 
@@ -31,35 +35,62 @@ Everything runs 100% locally on your Mac. No data leaves your machine.
 
 ## Quick Start
 
-**Requirements:** macOS 14+, Rust toolchain (1.85+), `jq`
+**Requirements:** macOS 14+ (Sonoma or later)
+
+### Option A: Pre-built binary (no Rust needed)
 
 ```bash
-# 1. Clone the repo
-git clone https://github.com/drbarq/macrelay.git
-cd macrelay
-
-# 2. Build, install, and configure Claude Desktop + Claude Code
-bash scripts/setup-claude.sh
-
-# 3. Restart Claude Desktop or Claude Code
-
-# 4. Try it out:
-#    "What's on my calendar this week?"
-#    "Create a reminder to buy groceries"
-#    "Search my emails from Amazon"
-#    "What apps are running?"
-#    "List my shortcuts"
+mkdir -p ~/.local/bin && \
+curl -L https://github.com/drbarq/macrelay/releases/latest/download/macrelay-macos-universal \
+  -o ~/.local/bin/macrelay && chmod +x ~/.local/bin/macrelay
 ```
 
-The setup script:
-1. Builds the release binary (~4MB)
-2. Installs it to `~/.local/bin/macrelay`
-3. Auto-configures Claude Desktop (`claude_desktop_config.json`)
-4. Auto-configures Claude Code (`~/.claude/mcp.json`)
+### Option B: Homebrew
+
+```bash
+brew install drbarq/tap/macrelay
+```
+
+### Option C: Build from source
+
+```bash
+git clone https://github.com/drbarq/macrelay.git && cd macrelay
+bash scripts/setup-claude.sh
+```
+
+### Configure your MCP client
+
+If you used Option A or B, add MacRelay to your MCP client config:
+
+**Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+```json
+{
+  "mcpServers": {
+    "macrelay": {
+      "command": "~/.local/bin/macrelay"
+    }
+  }
+}
+```
+
+**Claude Code** (`~/.claude/mcp.json`):
+```json
+{
+  "mcpServers": {
+    "macrelay": {
+      "command": "~/.local/bin/macrelay"
+    }
+  }
+}
+```
+
+Option C (build from source) auto-configures both clients via the setup script.
+
+Then restart your MCP client and try: *"What's on my calendar this week?"*
 
 ## Current Status
 
-**Feature complete.** 71 tools across 13 services. Full parity with MacUse.
+**Feature complete.** 71 tools across 13 services.
 
 | Metric | Value |
 |---|---|
@@ -84,20 +115,9 @@ The setup script:
 | **Stickies** | 4 | list, read, create, open | Done |
 | **Shortcuts** | 3 | list, get, run | Done |
 
-### MacRelay vs MacUse
-
-| | MacUse | MacRelay |
-|---|---|---|
-| Tools | 55 | **71** |
-| Price | $39 | Free |
-| Source | Closed | [MIT](https://github.com/drbarq/macrelay) |
-| Telemetry | PostHog + Sentry | None |
-| Cloud dependency | License server | None |
-| MCP clients | Claude Desktop, Cursor, etc. | Same |
-
 ## How It Was Built
 
-This entire project was built in a single Claude Code session:
+Built in a single Claude Code session:
 
 | Metric | Value |
 |---|---|
@@ -109,31 +129,14 @@ This entire project was built in a single Claude Code session:
 | Tests written | 166 |
 | Lines of Rust | ~8,000 |
 
-The process:
-1. Dissected the installed MacUse binary to extract its complete architecture
-2. Identified all 55+ tools, source module structure, and technical approach
-3. Built the MCP server from scratch using the same `rmcp` crate
-4. Implemented all services in 4 phases using parallel agent workflows
-5. Refined the testing suite to 166 meaningful unit and integration tests (137 CI-safe mock + pure unit tests, 29 local-only Tier 3 round-trip tests)
-
 ## Architecture
-
-### How We Got Here
-
-We dissected the installed MacUse binary (v1.7.3) to understand exactly how it works:
-
-- **MacUse is Rust/Tauri** (not Swift) using the `rmcp` crate for MCP
-- **Transports:** Streamable HTTP (background daemon) + stdio
-- **macOS integration:** AppleScript/JXA for Calendar, Reminders, Mail, Notes, Stickies; SQLite for Messages reads; Accessibility API + CGEvent for UI automation
-
-We built the same thing, open-source, using the same proven approach.
 
 ### Tech Stack
 
 | Component | Technology | Why |
 |---|---|---|
-| Language | Rust (edition 2024) | Best macOS FFI, high performance, same as MacUse |
-| MCP Server | rmcp 1.4 | Same library MacUse uses |
+| Language | Rust (edition 2024) | Performance, safety, native macOS FFI |
+| MCP Server | rmcp 1.4 | Mature MCP implementation |
 | macOS APIs | AppleScript/JXA + SQLite | Reliable cross-app automation |
 | Database | rusqlite (bundled) | Read Messages chat.db directly |
 | UI Automation | System Events + JXA | Accessibility tree inspection + input simulation |
@@ -218,8 +221,7 @@ The CI workflow on every push/PR runs `cargo fmt --check`, `cargo clippy -- -D w
 - [x] Phase 5: Testing refinement (166 tests: 137 CI-safe, 29 local-only Tier 3 round-trips)
 - [x] Phase 6: GitHub Actions CI (fmt + clippy + tests on `macos-latest`)
 
-### Future: Beyond MacUse
-Potential additions that go beyond what MacUse offers:
+### Future
 
 - [ ] **System Control** - Volume, brightness, Wi-Fi, battery, DND
 - [ ] **Safari/Browser** - Bookmarks, history, reading list, open tabs
@@ -231,9 +233,9 @@ Potential additions that go beyond what MacUse offers:
 - [ ] **Terminal** - Execute shell commands (sandboxed)
 
 ### Future: Distribution
-- [ ] Homebrew formula (`brew install macrelay`)
+- [x] Homebrew formula (`brew install drbarq/tap/macrelay`)
+- [x] GitHub Actions — universal binary releases on tag push
 - [ ] System tray app (Tauri) with status indicator
-- [ ] GitHub Actions CI + universal binary releases
 - [ ] DMG installer + code signing for non-technical users
 
 ## Contributing

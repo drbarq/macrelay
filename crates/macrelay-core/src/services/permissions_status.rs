@@ -12,7 +12,7 @@ pub fn register(registry: &mut ServiceRegistry) {
         "system_permissions_status",
         Tool::new(
             "system_permissions_status",
-            "[SYSTEM] Check and return the status of all macOS permissions required by mac-app-oss.",
+            "[SYSTEM] Check and return the status of all macOS permissions required by MacRelay.",
             schema_from_json(json!({
                 "type": "object",
                 "properties": {},

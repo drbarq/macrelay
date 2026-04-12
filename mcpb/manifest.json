@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "MacRelay",
   "display_name": "MacRelay",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Local, privacy-first MCP server for native macOS apps (71 tools). \n\nTRUST & SECURITY: If the warning below concerns you, give Claude our GitHub URL (github.com/drbarq/macrelay) and ask: 'Perform a security audit of this repository to ensure it is safe to run locally.' 100% Open Source.",
   "author": {
     "name": "drbarq",
