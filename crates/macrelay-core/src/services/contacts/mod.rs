@@ -3,6 +3,7 @@ use std::sync::Arc;
 use rmcp::model::Tool;
 use serde_json::json;
 
+use crate::macos::escape::escape_applescript_string;
 use crate::registry::{ServiceRegistry, ToolHandler, error_result, schema_from_json, text_result};
 
 /// Register all contacts tools with the service registry.
@@ -53,10 +54,12 @@ fn handler_search() -> ToolHandler {
                 None => return Ok(error_result("query is required")),
             };
 
+            let escaped_query = escape_applescript_string(query);
+
             // Use AppleScript for reliable contact search
             let script = format!(
                 r#"tell application "Contacts"
-                    set matchingPeople to (every person whose name contains "{query}")
+                    set matchingPeople to (every person whose name contains "{escaped_query}")
                     set output to ""
                     repeat with p in matchingPeople
                         set pName to name of p
@@ -72,7 +75,7 @@ fn handler_search() -> ToolHandler {
 "
                     end repeat
                     if output is "" then
-                        return "No contacts found matching: {query}"
+                        return "No contacts found matching: {escaped_query}"
                     end if
                     return output
                 end tell"#
@@ -178,7 +181,7 @@ mod tests {
         }
 
         let mock = Arc::new(AssertingMock {
-            expected_fragment: "whose name contains \"John\"".to_string(),
+            expected_fragment: "whose name contains \"John\"".to_string(), // escaped via escape_applescript_string
             response: "John Doe | Emails: john@example.com,  | Phones: 555-1234, ".to_string(),
         });
 

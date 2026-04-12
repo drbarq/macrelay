@@ -21,7 +21,11 @@
 ///            r#"he said \"hi\""#);
 /// ```
 pub fn escape_applescript_string(input: &str) -> String {
-    input.replace('\\', "\\\\").replace('"', "\\\"")
+    input
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
+        .replace('\r', "\\r")
 }
 
 /// Escape a string for embedding inside a JavaScript (JXA) string literal.

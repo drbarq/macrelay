@@ -1,5 +1,7 @@
 use anyhow::Result;
 
+use super::escape::escape_applescript_string;
+
 /// List all calendars using AppleScript.
 pub async fn list_calendars() -> Result<Vec<CalendarInfo>> {
     let script = r#"
@@ -106,14 +108,17 @@ pub async fn create_event(
     notes: &str,
 ) -> Result<String> {
     let allday_str = if is_all_day { "true" } else { "false" };
+    let escaped_title = escape_applescript_string(title);
+    let escaped_location = escape_applescript_string(location);
+    let escaped_notes = escape_applescript_string(notes);
 
     // For now, use descriptive date strings. Later we'll add Unix timestamp conversion.
     let script = format!(
         r#"
         tell application "Calendar"
             tell calendar 1
-                set newEvent to make new event with properties {{summary:"{title}", start date:(current date), end date:((current date) + 3600), location:"{location}", description:"{notes}", allday event:{allday_str}}}
-                return "Event created: {title}"
+                set newEvent to make new event with properties {{summary:"{escaped_title}", start date:(current date), end date:((current date) + 3600), location:"{escaped_location}", description:"{escaped_notes}", allday event:{allday_str}}}
+                return "Event created: {escaped_title}"
             end tell
         end tell
         "#

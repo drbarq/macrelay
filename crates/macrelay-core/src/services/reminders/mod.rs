@@ -206,7 +206,8 @@ fn handler_search_reminders() -> ToolHandler {
             let list_clause = if list_filter.is_empty() {
                 "repeat with l in lists".to_string()
             } else {
-                format!(r#"repeat with l in {{list "{list_filter}"}}"#)
+                let escaped_list = escape_applescript_string(list_filter);
+                format!(r#"repeat with l in {{list "{escaped_list}"}}"#)
             };
 
             let script = format!(

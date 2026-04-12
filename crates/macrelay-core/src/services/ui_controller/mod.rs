@@ -551,12 +551,13 @@ fn handler_press_key() -> ToolHandler {
                     String::new()
                 };
 
+            let escaped_key = escape_applescript_string(key);
+
             // Use key code for special keys, keystroke for characters
             let key_action = if let Some(code) = key_name_to_code(key) {
                 format!("key code {code}{using_clause}")
             } else {
                 // Single character or short string: use keystroke
-                let escaped_key = escape_applescript_string(key);
                 format!("keystroke \"{escaped_key}\"{using_clause}")
             };
 
@@ -566,7 +567,7 @@ fn handler_press_key() -> ToolHandler {
                 tell application "System Events"
                     {key_action}
                 end tell
-                return "Pressed key: {key}"
+                return "Pressed key: {escaped_key}"
                 "#
             );
 
@@ -933,7 +934,7 @@ fn handler_manage_app() -> ToolHandler {
             let force = args.get("force").and_then(|v| v.as_bool()).unwrap_or(false);
 
             let escaped_app = escape_applescript_string(app_name);
-            let escaped_app_shell = escape_shell_single_quoted(app_name);
+            let escaped_app_shell = escape_applescript_string(&escape_shell_single_quoted(app_name));
 
             let script = match action {
                 "open" => {

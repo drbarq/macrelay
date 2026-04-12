@@ -3,6 +3,7 @@ use std::sync::Arc;
 use rmcp::model::Tool;
 use serde_json::json;
 
+use crate::macos::escape::escape_applescript_string;
 use crate::registry::{ServiceRegistry, ToolHandler, error_result, schema_from_json, text_result};
 
 /// Register all maps tools with the service registry.
@@ -135,10 +136,10 @@ fn handler_search_places() -> ToolHandler {
             };
 
             let encoded_query = url_encode(query);
+            let escaped_query = escape_applescript_string(query);
             let script = format!(
                 r#"do shell script "open 'maps://?q={encoded_query}'"
-return "Opened Apple Maps with search: {}"#,
-                query.replace('"', "\\\"")
+return "Opened Apple Maps with search: {escaped_query}"#
             );
 
             match crate::macos::applescript::run_applescript(&script) {
@@ -177,12 +178,11 @@ fn handler_get_directions() -> ToolHandler {
             let encoded_origin = url_encode(origin);
             let encoded_dest = url_encode(destination);
 
+            let escaped_origin = escape_applescript_string(origin);
+            let escaped_dest = escape_applescript_string(destination);
             let script = format!(
                 r#"do shell script "open 'maps://?saddr={encoded_origin}&daddr={encoded_dest}&dirflg={dir_flag}'"
-return "Opened Apple Maps with {} directions from {} to {}"#,
-                transport_type,
-                origin.replace('"', "\\\""),
-                destination.replace('"', "\\\"")
+return "Opened Apple Maps with {transport_type} directions from {escaped_origin} to {escaped_dest}"#
             );
 
             match crate::macos::applescript::run_applescript(&script) {
@@ -212,10 +212,10 @@ fn handler_explore_places() -> ToolHandler {
 
             let encoded_search = url_encode(&search_term);
 
+            let escaped_search = escape_applescript_string(&search_term);
             let script = format!(
                 r#"do shell script "open 'maps://?q={encoded_search}'"
-return "Opened Apple Maps exploring nearby: {}"#,
-                search_term.replace('"', "\\\"")
+return "Opened Apple Maps exploring nearby: {escaped_search}"#
             );
 
             match crate::macos::applescript::run_applescript(&script) {
@@ -242,12 +242,12 @@ fn handler_calculate_eta() -> ToolHandler {
             let encoded_origin = url_encode(origin);
             let encoded_dest = url_encode(destination);
 
+            let escaped_origin = escape_applescript_string(origin);
+            let escaped_dest = escape_applescript_string(destination);
             // Open directions in driving mode; Maps.app displays the ETA
             let script = format!(
                 r#"do shell script "open 'maps://?saddr={encoded_origin}&daddr={encoded_dest}&dirflg=d'"
-return "Opened Apple Maps with directions from {} to {}. The estimated travel time (ETA) is displayed in the Maps app."#,
-                origin.replace('"', "\\\""),
-                destination.replace('"', "\\\"")
+return "Opened Apple Maps with directions from {escaped_origin} to {escaped_dest}. The estimated travel time (ETA) is displayed in the Maps app."#
             );
 
             match crate::macos::applescript::run_applescript(&script) {

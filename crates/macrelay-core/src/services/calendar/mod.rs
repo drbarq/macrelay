@@ -267,12 +267,18 @@ fn handler_create_event() -> ToolHandler {
                 Some(t) => t,
                 None => return Ok(error_result("title is required")),
             };
-            let start_str = match args.get("start_date").and_then(|v| v.as_str()) {
-                Some(s) => s,
+            let start_ts: i64 = match args.get("start_date").and_then(|v| v.as_str()) {
+                Some(s) => match s.parse() {
+                    Ok(n) => n,
+                    Err(_) => return Ok(error_result("start_date must be a Unix timestamp (integer)")),
+                },
                 None => return Ok(error_result("start_date is required")),
             };
-            let end_str = match args.get("end_date").and_then(|v| v.as_str()) {
-                Some(e) => e,
+            let end_ts: i64 = match args.get("end_date").and_then(|v| v.as_str()) {
+                Some(e) => match e.parse() {
+                    Ok(n) => n,
+                    Err(_) => return Ok(error_result("end_date must be a Unix timestamp (integer)")),
+                },
                 None => return Ok(error_result("end_date is required")),
             };
 
@@ -294,8 +300,8 @@ fn handler_create_event() -> ToolHandler {
 
             let script = format!(
                 r#"
-                set startEpoch to {start_str} as number
-                set endEpoch to {end_str} as number
+                set startEpoch to {start_ts} as number
+                set endEpoch to {end_ts} as number
                 set startDate to current date
                 set time of startDate to 0
                 set startDate to startDate - (startDate - (date "Thursday, January 1, 1970 at 12:00:00 AM")) + startEpoch
@@ -328,13 +334,19 @@ fn handler_reschedule_event() -> ToolHandler {
                 None => return Ok(error_result("title is required")),
             };
 
-            let new_start_str = match args.get("new_start_date").and_then(|v| v.as_str()) {
-                Some(s) => s,
+            let new_start_ts: i64 = match args.get("new_start_date").and_then(|v| v.as_str()) {
+                Some(s) => match s.parse() {
+                    Ok(n) => n,
+                    Err(_) => return Ok(error_result("new_start_date must be a Unix timestamp (integer)")),
+                },
                 None => return Ok(error_result("new_start_date is required")),
             };
 
-            let new_end_str = match args.get("new_end_date").and_then(|v| v.as_str()) {
-                Some(e) => e,
+            let new_end_ts: i64 = match args.get("new_end_date").and_then(|v| v.as_str()) {
+                Some(e) => match e.parse() {
+                    Ok(n) => n,
+                    Err(_) => return Ok(error_result("new_end_date must be a Unix timestamp (integer)")),
+                },
                 None => return Ok(error_result("new_end_date is required")),
             };
 
@@ -342,8 +354,8 @@ fn handler_reschedule_event() -> ToolHandler {
 
             let script = format!(
                 r#"
-                set newStartEpoch to {new_start_str} as number
-                set newEndEpoch to {new_end_str} as number
+                set newStartEpoch to {new_start_ts} as number
+                set newEndEpoch to {new_end_ts} as number
                 set newStartDate to current date
                 set time of newStartDate to 0
                 set newStartDate to newStartDate - (newStartDate - (date "Thursday, January 1, 1970 at 12:00:00 AM")) + newStartEpoch
@@ -540,13 +552,19 @@ fn handler_open_event() -> ToolHandler {
 fn handler_find_available_times() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
-            let start_str = match args.get("start_date").and_then(|v| v.as_str()) {
-                Some(s) => s,
+            let start_ts: i64 = match args.get("start_date").and_then(|v| v.as_str()) {
+                Some(s) => match s.parse() {
+                    Ok(n) => n,
+                    Err(_) => return Ok(error_result("start_date must be a Unix timestamp (integer)")),
+                },
                 None => return Ok(error_result("start_date is required")),
             };
 
-            let end_str = match args.get("end_date").and_then(|v| v.as_str()) {
-                Some(e) => e,
+            let end_ts: i64 = match args.get("end_date").and_then(|v| v.as_str()) {
+                Some(e) => match e.parse() {
+                    Ok(n) => n,
+                    Err(_) => return Ok(error_result("end_date must be a Unix timestamp (integer)")),
+                },
                 None => return Ok(error_result("end_date is required")),
             };
 
@@ -566,8 +584,8 @@ fn handler_find_available_times() -> ToolHandler {
             // AppleScript fetches all events in the range; we process free slots from the output
             let script = format!(
                 r#"
-                set rangeStartEpoch to {start_str} as number
-                set rangeEndEpoch to {end_str} as number
+                set rangeStartEpoch to {start_ts} as number
+                set rangeEndEpoch to {end_ts} as number
 
                 set rangeStart to current date
                 set time of rangeStart to 0
@@ -606,8 +624,8 @@ fn handler_find_available_times() -> ToolHandler {
 
             match crate::macos::applescript::run_applescript(&script) {
                 Ok(raw_output) => {
-                    let range_start: i64 = start_str.parse().unwrap_or(0);
-                    let range_end: i64 = end_str.parse().unwrap_or(0);
+                    let range_start: i64 = start_ts;
+                    let range_end: i64 = end_ts;
                     let min_duration_secs = (min_duration_minutes * 60) as i64;
 
                     // Parse busy intervals from the AppleScript output

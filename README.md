@@ -177,6 +177,17 @@ macrelay/
     TESTING.md                      # Comprehensive testing strategy
 ```
 
+## Security
+
+MacRelay is designed with security as a core principle:
+
+- **100% local** — No data leaves your machine. No cloud, no telemetry, no analytics.
+- **Injection-safe** — All user input is escaped via dedicated helpers (`escape_applescript_string`, `escape_jxa_string`, `escape_shell_single_quoted`) before embedding in AppleScript/JXA/shell commands. No raw string interpolation.
+- **Read-only databases** — SQLite connections (Messages, Notes, Mail) are opened with `SQLITE_OPEN_READ_ONLY`. All queries use parameterized bindings, never string concatenation.
+- **No dependencies with known vulnerabilities** — `cargo audit` reports zero advisories across 151 crate dependencies.
+- **Minimal permissions** — Each tool requests only the macOS permissions it needs. The `permissions_status` tool lets you audit all states.
+- **Open source** — Every line is auditable. See [SECURITY_REPORT.md](SECURITY_REPORT.md) for the full security audit.
+
 ## Permissions
 
 MacRelay uses AppleScript to interact with native apps. macOS will prompt for Automation permission per-app on first use.

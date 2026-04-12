@@ -3,7 +3,7 @@ use std::sync::Arc;
 use rmcp::model::Tool;
 use serde_json::json;
 
-use crate::macos::escape::{escape_jxa_string, escape_shell_single_quoted};
+use crate::macos::escape::{escape_applescript_string, escape_jxa_string, escape_shell_single_quoted};
 use crate::registry::{ServiceRegistry, ToolHandler, error_result, schema_from_json, text_result};
 
 /// Register all stickies tools with the service registry.
@@ -129,7 +129,7 @@ fn handler_stickies_read() -> ToolHandler {
                 None => return Ok(error_result("sticky_id is required")),
             };
 
-            let escaped_id = escape_shell_single_quoted(sticky_id);
+            let escaped_id = escape_applescript_string(&escape_shell_single_quoted(sticky_id));
 
             let script = format!(
                 r#"do shell script "cat ~/Library/Containers/com.apple.Stickies/Data/Library/Stickies/'{escaped_id}'/TXT.rtf 2>/dev/null || echo 'Sticky not found'""#
