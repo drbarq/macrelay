@@ -5,7 +5,7 @@
 </p>
 
 [![CI](https://github.com/drbarq/macrelay/actions/workflows/ci.yml/badge.svg)](https://github.com/drbarq/macrelay/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/tests-161%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-168%20passing-brightgreen)
 ![Tools](https://img.shields.io/badge/tools-71%20across%2013%20services-blue)
 ![Platform](https://img.shields.io/badge/platform-macOS%2014%2B-lightgrey)
 ![Rust](https://img.shields.io/badge/rust-1.85%2B-orange)
@@ -97,7 +97,7 @@ bash scripts/uninstall.sh
 | Metric | Value |
 |---|---|
 | Tools implemented | 71 |
-| Tests written | 190 (161 CI-safe, 29 local-only) |
+| Tests written | 197 (168 CI-safe, 29 local-only) |
 | Coverage | 13/13 services |
 | CI Status | passing (GitHub Actions) |
 
@@ -161,6 +161,7 @@ macrelay/
         config.rs                   # Service toggles, Claude Desktop config writer
         process.rs                  # Server process detection
         launchagent.rs              # Launch at Login support
+        uninstall.rs                # In-app uninstall (removes all files + configs)
     macrelay-core/                  # Core library
       src/
         registry.rs                 # Service registry, tool routing
@@ -181,13 +182,17 @@ macrelay/
           permissions_status.rs     # 1 tool
         macos/
           applescript.rs            # osascript/JXA runner (with mocking)
+          escape.rs                 # Injection-safe string escaping
           eventkit.rs               # EventKit helpers
   scripts/
     setup-claude.sh                 # Build + install + configure
+    build-app.sh                    # Package MacRelay.app bundle
+    uninstall.sh                    # Clean removal of all installed files
     generate_icons.py               # Regenerate all icon assets from source
   docs/
     PRD.md                          # Full product requirements
     TESTING.md                      # Comprehensive testing strategy
+    PERFORMANCE.md                  # Benchmarks and binary analysis
 ```
 
 ## Security
@@ -219,11 +224,11 @@ Use the `permissions_status` tool to check all states at once.
 MacRelay uses a three-tier testing strategy (see [docs/TESTING.md](docs/TESTING.md) for the full strategy, audit, and per-service coverage report).
 
 ```bash
-# Run 161 CI-safe unit and mock-based tests (Tier 1 & 2), ~10s, no permissions
+# Run 168 CI-safe unit and mock-based tests (Tier 1 & 2), ~10s, no permissions
 cargo test -p macrelay-core --lib
 cargo test -p macrelay-menubar
 
-# Run all 190 tests including 29 local-only tests that hit real macOS apps (Tier 3)
+# Run all 197 tests including 29 local-only tests that hit real macOS apps (Tier 3)
 # WARNING: This will interact with your real Calendar/Notes/Mail/Reminders/Contacts.
 cargo test -p macrelay-core --all-targets -- --include-ignored
 cargo test -p macrelay-menubar
@@ -244,7 +249,7 @@ The CI workflow on every push/PR runs `cargo fmt --check`, `cargo clippy -- -D w
 - [x] Phase 2: Notes + Mail + Messages + Location + Maps (30 tools)
 - [x] Phase 3: UI Viewer + UI Controller (16 tools)
 - [x] Phase 4: Stickies + Shortcuts (7 tools)
-- [x] Phase 5: Testing refinement (190 tests: 161 CI-safe, 29 local-only Tier 3 round-trips)
+- [x] Phase 5: Testing refinement (197 tests: 168 CI-safe, 29 local-only Tier 3 round-trips)
 - [x] Phase 6: GitHub Actions CI (fmt + clippy + tests on `macos-latest`)
 
 ### Future
@@ -259,7 +264,7 @@ The CI workflow on every push/PR runs `cargo fmt --check`, `cargo clippy -- -D w
 - [ ] **Terminal** - Execute shell commands (sandboxed)
 
 ### Future: Distribution
-- [x] Homebrew formula (`brew install drbarq/tap/macrelay`)
+- [x] Homebrew Cask (`brew install --cask drbarq/tap/macrelay`)
 - [x] GitHub Actions — universal binary releases on tag push
 - [x] Menu bar app — service toggles, permissions view, launch at login
 - [ ] DMG installer + code signing for non-technical users
