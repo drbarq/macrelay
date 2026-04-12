@@ -192,6 +192,24 @@ impl PermissionManager {
         }
     }
 
+    /// Check if a permission is granted. Returns Ok(()) if granted,
+    /// or Err with a user-facing error message if not.
+    pub fn require(perm: PermissionType) -> Result<(), String> {
+        let status = match perm {
+            PermissionType::Accessibility => Self::check_accessibility(),
+            PermissionType::ScreenRecording => Self::check_screen_recording(),
+            PermissionType::FullDiskAccess => Self::check_full_disk_access(),
+            PermissionType::Calendar => Self::check_calendar(),
+            PermissionType::Reminders => Self::check_reminders(),
+            PermissionType::Contacts => Self::check_contacts(),
+            PermissionType::Location => Self::check_location(),
+        };
+        match status {
+            PermissionStatus::Granted => Ok(()),
+            _ => Err(Self::permission_error(perm)),
+        }
+    }
+
     /// Return a formatted error message for a missing permission.
     pub fn permission_error(perm: PermissionType) -> String {
         format!(

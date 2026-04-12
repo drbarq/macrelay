@@ -4,6 +4,7 @@ use rmcp::model::Tool;
 use serde_json::json;
 
 use crate::macos::escape::escape_applescript_string;
+use crate::permissions::{PermissionManager, PermissionType};
 use crate::registry::{ServiceRegistry, ToolHandler, error_result, schema_from_json, text_result};
 
 /// Register all reminder tools with the service registry.
@@ -166,6 +167,9 @@ pub fn register(registry: &mut ServiceRegistry) {
 fn handler_list_lists() -> ToolHandler {
     Arc::new(|_args| {
         Box::pin(async move {
+            if let Err(msg) = PermissionManager::require(PermissionType::Reminders) {
+                return Ok(error_result(msg));
+            }
             let script = r#"
                 tell application "Reminders"
                     set output to ""
@@ -199,6 +203,9 @@ fn handler_list_lists() -> ToolHandler {
 fn handler_search_reminders() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
+            if let Err(msg) = PermissionManager::require(PermissionType::Reminders) {
+                return Ok(error_result(msg));
+            }
             let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(50);
             let query = args.get("query").and_then(|v| v.as_str()).unwrap_or("");
             let list_filter = args.get("list_name").and_then(|v| v.as_str()).unwrap_or("");
@@ -272,6 +279,9 @@ fn handler_search_reminders() -> ToolHandler {
 fn handler_create_reminder() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
+            if let Err(msg) = PermissionManager::require(PermissionType::Reminders) {
+                return Ok(error_result(msg));
+            }
             let title = match args.get("title").and_then(|v| v.as_str()) {
                 Some(t) => t,
                 None => return Ok(error_result("title is required")),
@@ -324,6 +334,9 @@ fn handler_create_reminder() -> ToolHandler {
 fn handler_complete_reminder() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
+            if let Err(msg) = PermissionManager::require(PermissionType::Reminders) {
+                return Ok(error_result(msg));
+            }
             let title = match args.get("title").and_then(|v| v.as_str()) {
                 Some(t) => t,
                 None => return Ok(error_result("title is required")),
@@ -356,6 +369,9 @@ fn handler_complete_reminder() -> ToolHandler {
 fn handler_update_reminder() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
+            if let Err(msg) = PermissionManager::require(PermissionType::Reminders) {
+                return Ok(error_result(msg));
+            }
             let title = match args.get("title").and_then(|v| v.as_str()) {
                 Some(t) => t,
                 None => return Ok(error_result("title is required")),
@@ -420,6 +436,9 @@ fn handler_update_reminder() -> ToolHandler {
 fn handler_delete_reminder() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
+            if let Err(msg) = PermissionManager::require(PermissionType::Reminders) {
+                return Ok(error_result(msg));
+            }
             let title = match args.get("title").and_then(|v| v.as_str()) {
                 Some(t) => t,
                 None => return Ok(error_result("title is required")),
@@ -452,6 +471,9 @@ fn handler_delete_reminder() -> ToolHandler {
 fn handler_open_reminder() -> ToolHandler {
     Arc::new(|_args| {
         Box::pin(async move {
+            if let Err(msg) = PermissionManager::require(PermissionType::Reminders) {
+                return Ok(error_result(msg));
+            }
             let script = r#"
                 tell application "Reminders"
                     activate

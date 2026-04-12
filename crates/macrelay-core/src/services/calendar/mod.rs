@@ -5,6 +5,7 @@ use serde_json::json;
 
 use crate::macos::escape::escape_applescript_string;
 use crate::macos::eventkit;
+use crate::permissions::{PermissionManager, PermissionType};
 use crate::registry::{ServiceRegistry, ToolHandler, error_result, schema_from_json, text_result};
 
 /// Register all calendar tools with the service registry.
@@ -222,6 +223,9 @@ pub fn register(registry: &mut ServiceRegistry) {
 fn handler_list_calendars() -> ToolHandler {
     Arc::new(|_args| {
         Box::pin(async move {
+            if let Err(msg) = PermissionManager::require(PermissionType::Calendar) {
+                return Ok(error_result(msg));
+            }
             match eventkit::list_calendars().await {
                 Ok(calendars) => {
                     let json = serde_json::to_string_pretty(&calendars)?;
@@ -236,6 +240,9 @@ fn handler_list_calendars() -> ToolHandler {
 fn handler_search_events() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
+            if let Err(msg) = PermissionManager::require(PermissionType::Calendar) {
+                return Ok(error_result(msg));
+            }
             let days_ahead = 7u32; // Default 7 days
             let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(50) as usize;
 
@@ -263,6 +270,9 @@ fn handler_search_events() -> ToolHandler {
 fn handler_create_event() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
+            if let Err(msg) = PermissionManager::require(PermissionType::Calendar) {
+                return Ok(error_result(msg));
+            }
             let title = match args.get("title").and_then(|v| v.as_str()) {
                 Some(t) => t,
                 None => return Ok(error_result("title is required")),
@@ -335,6 +345,9 @@ fn handler_create_event() -> ToolHandler {
 fn handler_reschedule_event() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
+            if let Err(msg) = PermissionManager::require(PermissionType::Calendar) {
+                return Ok(error_result(msg));
+            }
             let title = match args.get("title").and_then(|v| v.as_str()) {
                 Some(t) => t,
                 None => return Ok(error_result("title is required")),
@@ -410,6 +423,9 @@ fn handler_reschedule_event() -> ToolHandler {
 fn handler_cancel_event() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
+            if let Err(msg) = PermissionManager::require(PermissionType::Calendar) {
+                return Ok(error_result(msg));
+            }
             let title = match args.get("title").and_then(|v| v.as_str()) {
                 Some(t) => t,
                 None => return Ok(error_result("title is required")),
@@ -451,6 +467,9 @@ fn handler_cancel_event() -> ToolHandler {
 fn handler_update_event() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
+            if let Err(msg) = PermissionManager::require(PermissionType::Calendar) {
+                return Ok(error_result(msg));
+            }
             let title = match args.get("title").and_then(|v| v.as_str()) {
                 Some(t) => t,
                 None => return Ok(error_result("title is required")),
@@ -518,6 +537,9 @@ fn handler_update_event() -> ToolHandler {
 fn handler_open_event() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
+            if let Err(msg) = PermissionManager::require(PermissionType::Calendar) {
+                return Ok(error_result(msg));
+            }
             let title = match args.get("title").and_then(|v| v.as_str()) {
                 Some(t) => t,
                 None => return Ok(error_result("title is required")),
@@ -566,6 +588,9 @@ fn handler_open_event() -> ToolHandler {
 fn handler_find_available_times() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
+            if let Err(msg) = PermissionManager::require(PermissionType::Calendar) {
+                return Ok(error_result(msg));
+            }
             let start_ts: i64 = match args.get("start_date").and_then(|v| v.as_str()) {
                 Some(s) => match s.parse() {
                     Ok(n) => n,

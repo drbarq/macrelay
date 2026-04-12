@@ -4,6 +4,7 @@ use rmcp::model::Tool;
 use serde_json::json;
 
 use crate::macos::escape::escape_applescript_string;
+use crate::permissions::{PermissionManager, PermissionType};
 use crate::registry::{ServiceRegistry, ToolHandler, error_result, schema_from_json, text_result};
 
 /// Register all contacts tools with the service registry.
@@ -49,6 +50,9 @@ pub fn register(registry: &mut ServiceRegistry) {
 fn handler_search() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
+            if let Err(msg) = PermissionManager::require(PermissionType::Contacts) {
+                return Ok(error_result(msg));
+            }
             let query = match args.get("query").and_then(|v| v.as_str()) {
                 Some(q) => q,
                 None => return Ok(error_result("query is required")),
@@ -92,6 +96,9 @@ fn handler_search() -> ToolHandler {
 fn handler_get_all() -> ToolHandler {
     Arc::new(|args| {
         Box::pin(async move {
+            if let Err(msg) = PermissionManager::require(PermissionType::Contacts) {
+                return Ok(error_result(msg));
+            }
             let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(100);
 
             let script = format!(
