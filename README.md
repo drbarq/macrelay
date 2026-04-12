@@ -151,6 +151,10 @@ Built in a single Claude Code session:
 | Tests written | 166 |
 | Lines of Rust | ~8,000 |
 
+## Performance
+
+3.2ms startup. 137 tests in 0.01s. The Rust is not the bottleneck — macOS AppleScript subprocess spawning (20-50ms per call) is. See [docs/PERFORMANCE.md](docs/PERFORMANCE.md) for full benchmarks, binary size breakdown, and profiling instructions.
+
 ## Architecture
 
 ### Tech Stack
