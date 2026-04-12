@@ -14,7 +14,13 @@ if pgrep -x macrelay-menubar > /dev/null 2>&1; then
     sleep 1
 fi
 
-# ── 2. Remove app bundle ──────────────────────────────────────────────────
+# ── 2. Uninstall Homebrew cask if present ─────────────────────────────────
+if brew list --cask macrelay &> /dev/null; then
+    echo "  Uninstalling Homebrew cask..."
+    brew uninstall --cask macrelay
+fi
+
+# ── 3. Remove app bundle (if installed manually, not via Homebrew) ────────
 if [ -d "/Applications/MacRelay.app" ]; then
     echo "  Removing /Applications/MacRelay.app"
     rm -rf "/Applications/MacRelay.app"

@@ -55,6 +55,19 @@ pub fn uninstall() -> Vec<String> {
         "Claude Code",
     );
 
+    // ── Homebrew cask ─────────────────────────────────────────────────
+    let brew_check = Command::new("brew")
+        .args(["list", "--cask", "macrelay"])
+        .output();
+    if let Ok(output) = brew_check
+        && output.status.success()
+    {
+        let _ = Command::new("brew")
+            .args(["uninstall", "--cask", "macrelay"])
+            .output();
+        actions.push("Uninstalled Homebrew cask".to_string());
+    }
+
     // ── App bundle (delete self — safe on macOS while running) ────────
     if std::fs::remove_dir_all("/Applications/MacRelay.app").is_ok() {
         actions.push("Removed /Applications/MacRelay.app".to_string());
