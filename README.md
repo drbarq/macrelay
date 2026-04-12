@@ -10,10 +10,20 @@
 ![Platform](https://img.shields.io/badge/platform-macOS%2014%2B-lightgrey)
 ![Rust](https://img.shields.io/badge/rust-1.85%2B-orange)
 ![License](https://img.shields.io/badge/license-MIT-blue)
+![Security](https://img.shields.io/badge/security-audited-brightgreen)
 
 Open-source MCP server that relays your AI's commands to native macOS apps.
 
 Local, privacy-first, open-source. Works with Claude Desktop, Cursor, Claude Code, and any MCP-compatible client. No cloud, no subscriptions, no telemetry.
+
+---
+
+**Built by [Joe Tustin](https://joetustin.com)**
+
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-joetustin-0A66C2?logo=linkedin)](https://www.linkedin.com/in/joetustin/)
+[![TikTok](https://img.shields.io/badge/TikTok-@joetustin__-000000?logo=tiktok)](https://www.tiktok.com/@joetustin_)
+[![Substack](https://img.shields.io/badge/Substack-joetustin-FF6719?logo=substack)](https://joetustin.substack.com/)
+[![Email](https://img.shields.io/badge/Email-hello@joetustin.com-EA4335?logo=gmail)](mailto:hello@joetustin.com)
 
 ## What It Does
 
