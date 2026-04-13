@@ -23,6 +23,36 @@ jobs:
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
 
+      - name: Import Apple Certificate
+        env:
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          # Create a temporary keychain for CI
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          KEYCHAIN_PASSWORD="ci-keychain-$(date +%s)"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Import the certificate
+          echo "$APPLE_CERTIFICATE_BASE64" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security import "$RUNNER_TEMP/certificate.p12" \
+            -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 \
+            -k "$KEYCHAIN_PATH"
+
+          # Allow codesign to access the keychain
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Add to search list
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
+
+          # Verify
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+
       - name: Build Universal Binaries
         run: |
           cargo build --release --target x86_64-apple-darwin
@@ -38,11 +68,12 @@ jobs:
             -output bin/macrelay-menubar
           chmod +x bin/macrelay bin/macrelay-menubar
 
-      - name: Package App Bundle
+      - name: Package and Sign App Bundle
         run: |
           APP_DIR="dist/MacRelay.app"
           CONTENTS="${APP_DIR}/Contents"
           VERSION="${GITHUB_REF_NAME#v}"
+          IDENTITY="Developer ID Application: Joseph Tustin (X98GWB4NWD)"
 
           rm -rf "$APP_DIR"
           mkdir -p "${CONTENTS}/MacOS" "${CONTENTS}/Resources"
@@ -87,9 +118,56 @@ jobs:
           </plist>
           PLIST
 
+          # Sign the server binary with its own identifier
+          codesign --sign "$IDENTITY" \
+            --options runtime \
+            --entitlements macrelay.entitlements \
+            --identifier "com.macrelay.server" \
+            --force \
+            "${CONTENTS}/MacOS/macrelay"
+
+          # Sign the full .app bundle (signs menubar binary with bundle ID)
+          codesign --sign "$IDENTITY" \
+            --options runtime \
+            --entitlements macrelay.entitlements \
+            --deep --force \
+            "$APP_DIR"
+
+          # Verify
+          codesign --verify --deep --strict "$APP_DIR"
+
+          # Zip for release
           cd dist
           zip -r MacRelay.zip MacRelay.app
           cd ..
+
+      - name: Notarize App
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_TEAM_ID: X98GWB4NWD
+        run: |
+          if [ -n "$APPLE_ID" ] && [ -n "$APPLE_ID_PASSWORD" ]; then
+            xcrun notarytool submit dist/MacRelay.zip \
+              --apple-id "$APPLE_ID" \
+              --password "$APPLE_ID_PASSWORD" \
+              --team-id "$APPLE_TEAM_ID" \
+              --wait
+
+            # Staple the notarization ticket to the app
+            unzip -o dist/MacRelay.zip -d dist/staple-tmp
+            xcrun stapler staple dist/staple-tmp/MacRelay.app
+
+            # Re-zip with stapled app
+            cd dist/staple-tmp
+            zip -r ../MacRelay.zip MacRelay.app
+            cd ../..
+            rm -rf dist/staple-tmp
+
+            echo "Notarization complete"
+          else
+            echo "APPLE_ID/APPLE_ID_PASSWORD not set — skipping notarization (signing still applied)"
+          fi
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -125,7 +203,6 @@ jobs:
             app "MacRelay.app"
 
             postflight do
-              system "xattr", "-cr", "#{appdir}/MacRelay.app"
               system "open", "#{appdir}/MacRelay.app"
             end
 
@@ -145,3 +222,8 @@ jobs:
           git add Casks/macrelay.rb
           git commit -m "Bump MacRelay to v${VERSION}"
           git push
+
+      - name: Cleanup Keychain
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/app-signing.keychain-db" 2>/dev/null || true
