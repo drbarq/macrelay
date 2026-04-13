@@ -29,8 +29,8 @@ cp assets/macrelay.icns "${CONTENTS}/Resources/macrelay.icns"
 mkdir -p "${CONTENTS}/Resources/mcpb/server"
 cp mcpb/manifest.json "${CONTENTS}/Resources/mcpb/manifest.json"
 cp mcpb/icon.png "${CONTENTS}/Resources/mcpb/icon.png"
-# MCPB server points to the binary inside the .app
-ln -s ../../../MacOS/macrelay "${CONTENTS}/Resources/mcpb/server/macrelay"
+# Copy server binary for MCPB bundle (not symlink — symlinks break codesign after zip)
+cp target/release/macrelay "${CONTENTS}/Resources/mcpb/server/macrelay"
 
 # ── Info.plist ─────────────────────────────────────────────────────────────
 cat > "${CONTENTS}/Info.plist" << 'PLIST'
