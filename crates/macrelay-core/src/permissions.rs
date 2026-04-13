@@ -193,7 +193,11 @@ impl PermissionManager {
     }
 
     /// Check if a permission is granted or can be prompted.
-    /// Returns Ok(()) if granted or not yet determined (so macOS can prompt).
+    /// Returns Ok(()) if granted.
+    /// Returns Ok(()) if not yet determined — the first AppleScript call will
+    /// trigger the macOS permission dialog. If the user doesn't respond in time,
+    /// the enforced timeout in `run_applescript_impl` will catch it and return a
+    /// clear error instead of hanging indefinitely.
     /// Returns Err only if explicitly denied (user must grant manually).
     pub fn require(perm: PermissionType) -> Result<(), String> {
         let status = match perm {
@@ -208,10 +212,24 @@ impl PermissionManager {
         match status {
             // Granted — proceed
             PermissionStatus::Granted => Ok(()),
-            // NotDetermined — let the operation run so macOS can prompt the user
+            // NotDetermined — let the operation run so macOS can prompt the user.
+            // The subprocess timeout will catch it if the dialog goes unanswered.
             PermissionStatus::NotDetermined => Ok(()),
             // Denied or Unknown — block with a helpful error
             _ => Err(Self::permission_error(perm)),
+        }
+    }
+
+    /// Check permission status and return it directly (useful for pre-flight checks).
+    pub fn status(perm: PermissionType) -> PermissionStatus {
+        match perm {
+            PermissionType::Accessibility => Self::check_accessibility(),
+            PermissionType::ScreenRecording => Self::check_screen_recording(),
+            PermissionType::FullDiskAccess => Self::check_full_disk_access(),
+            PermissionType::Calendar => Self::check_calendar(),
+            PermissionType::Reminders => Self::check_reminders(),
+            PermissionType::Contacts => Self::check_contacts(),
+            PermissionType::Location => Self::check_location(),
         }
     }
 
@@ -298,6 +316,31 @@ mod tests {
             _ => Err("denied"),
         };
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_status_returns_permission_status() {
+        // Verify that status() returns a valid PermissionStatus for each type.
+        // We can't control the actual macOS state, but we can verify it doesn't panic.
+        let types = [
+            PermissionType::Accessibility,
+            PermissionType::ScreenRecording,
+            PermissionType::FullDiskAccess,
+            PermissionType::Calendar,
+            PermissionType::Reminders,
+            PermissionType::Contacts,
+            PermissionType::Location,
+        ];
+        for pt in types {
+            let status = PermissionManager::status(pt);
+            // Just verify it returns a valid variant
+            match status {
+                PermissionStatus::Granted
+                | PermissionStatus::Denied
+                | PermissionStatus::NotDetermined
+                | PermissionStatus::Unknown => {} // all valid
+            }
+        }
     }
 
     #[test]
