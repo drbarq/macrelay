@@ -148,15 +148,26 @@ jobs:
           APPLE_TEAM_ID: X98GWB4NWD
         run: |
           if [ -n "$APPLE_ID" ] && [ -n "$APPLE_ID_PASSWORD" ]; then
+            # Submit for notarization and wait for Apple to process
             xcrun notarytool submit dist/MacRelay.zip \
               --apple-id "$APPLE_ID" \
               --password "$APPLE_ID_PASSWORD" \
               --team-id "$APPLE_TEAM_ID" \
               --wait
 
-            # Staple the notarization ticket to the app
+            # Staple the notarization ticket to the .app (not the zip)
+            # Staple needs the actual .app, so unzip, staple, re-zip
             unzip -o dist/MacRelay.zip -d dist/staple-tmp
-            xcrun stapler staple dist/staple-tmp/MacRelay.app
+
+            # Retry stapling — Apple's CDN can take a moment to propagate
+            for i in 1 2 3 4 5; do
+              if xcrun stapler staple dist/staple-tmp/MacRelay.app 2>&1; then
+                echo "Stapling succeeded on attempt $i"
+                break
+              fi
+              echo "Stapling attempt $i failed, waiting 15s..."
+              sleep 15
+            done
 
             # Re-zip with stapled app
             cd dist/staple-tmp
@@ -164,7 +175,7 @@ jobs:
             cd ../..
             rm -rf dist/staple-tmp
 
-            echo "Notarization complete"
+            echo "Notarization and stapling complete"
           else
             echo "APPLE_ID/APPLE_ID_PASSWORD not set — skipping notarization (signing still applied)"
           fi
