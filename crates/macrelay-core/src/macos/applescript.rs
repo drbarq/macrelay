@@ -101,6 +101,13 @@ fn intercept_applescript_error(stderr: &str) -> anyhow::Error {
         ));
     }
 
+    // 1002: osascript is not allowed to send keystrokes
+    if stderr.contains("1002") {
+        return anyhow::anyhow!(PermissionManager::permission_error(
+            PermissionType::Accessibility
+        ));
+    }
+
     anyhow::anyhow!("AppleScript error: {stderr}")
 }
 
@@ -184,5 +191,43 @@ mod tests {
             .await;
 
         assert_eq!(result.unwrap(), "mocked");
+    }
+
+    #[test]
+    fn test_intercept_error_1743_returns_accessibility() {
+        let err = intercept_applescript_error("execution error: -1743");
+        assert!(
+            err.to_string()
+                .contains("Permission required: Accessibility")
+        );
+    }
+
+    #[test]
+    fn test_intercept_error_25211_returns_accessibility() {
+        let err = intercept_applescript_error("execution error: -25211");
+        assert!(
+            err.to_string()
+                .contains("Permission required: Accessibility")
+        );
+    }
+
+    #[test]
+    fn test_intercept_error_1002_returns_accessibility() {
+        let err = intercept_applescript_error(
+            "Error: osascript is not allowed to send keystrokes. (1002)",
+        );
+        assert!(
+            err.to_string()
+                .contains("Permission required: Accessibility")
+        );
+    }
+
+    #[test]
+    fn test_intercept_unknown_error_returns_raw() {
+        let err = intercept_applescript_error("some random error -999");
+        assert!(
+            err.to_string()
+                .contains("AppleScript error: some random error")
+        );
     }
 }

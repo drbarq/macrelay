@@ -116,6 +116,33 @@ pub fn register(registry: &mut ServiceRegistry) {
     );
 
     registry.register(
+        "productivity_notes_update_note",
+        Tool::new(
+            "productivity_notes_update_note",
+            "[UPDATE] Update an existing note's body and/or name. Finds the note by iterating all accounts and folders.",
+            schema_from_json(json!({
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "The current name (title) of the note to update."
+                    },
+                    "body": {
+                        "type": "string",
+                        "description": "New HTML body content for the note."
+                    },
+                    "new_name": {
+                        "type": "string",
+                        "description": "New name/title for the note."
+                    }
+                },
+                "required": ["name"]
+            })),
+        ),
+        handler_update_note(),
+    );
+
+    registry.register(
         "productivity_notes_delete_note",
         Tool::new(
             "productivity_notes_delete_note",
@@ -357,18 +384,21 @@ fn handler_read_note() -> ToolHandler {
             let script = format!(
                 r#"
                 tell application "Notes"
-                    set matchedNotes to (every note whose name is "{escaped_name}")
-                    if (count of matchedNotes) > 0 then
-                        set theNote to item 1 of matchedNotes
-                        set noteName to name of theNote
-                        set noteBody to body of theNote
-                        set noteFolder to name of container of theNote
-                        set modDate to modification date of theNote
-                        set creDate to creation date of theNote
-                        return "NAME:" & noteName & linefeed & "FOLDER:" & noteFolder & linefeed & "CREATED:" & (creDate as text) & linefeed & "MODIFIED:" & (modDate as text) & linefeed & "BODY:" & linefeed & noteBody
-                    else
-                        return "ERROR:No note found with name: {escaped_name}"
-                    end if
+                    repeat with a in accounts
+                        set acctName to name of a
+                        repeat with f in folders of a
+                            set folderName to name of f
+                            set matches to (every note of f whose name is "{escaped_name}")
+                            if (count of matches) > 0 then
+                                set theNote to item 1 of matches
+                                set noteBody to body of theNote
+                                set modDate to modification date of theNote
+                                set creDate to creation date of theNote
+                                return "NAME:" & (name of theNote) & "||FOLDER:" & folderName & "||ACCOUNT:" & acctName & "||MODIFIED:" & (modDate as text) & "||CREATED:" & (creDate as text) & "||BODY:" & noteBody
+                            end if
+                        end repeat
+                    end repeat
+                    return "ERROR:No note found with name: {escaped_name}"
                 end tell
                 "#
             );
@@ -380,7 +410,23 @@ fn handler_read_note() -> ToolHandler {
                             output.trim_start_matches("ERROR:").to_string(),
                         ))
                     } else {
-                        Ok(text_result(output))
+                        // Parse the ||-delimited output into structured JSON.
+                        // Use splitn(7, "||") because BODY is last and may contain "||".
+                        let parts: Vec<&str> = output.splitn(7, "||").collect();
+                        let get_field = |prefix: &str, part: Option<&&str>| -> String {
+                            part.map(|p| p.trim_start_matches(prefix).to_string())
+                                .unwrap_or_default()
+                        };
+                        let note = json!({
+                            "name": get_field("NAME:", parts.first()),
+                            "folder": get_field("FOLDER:", parts.get(1)),
+                            "account": get_field("ACCOUNT:", parts.get(2)),
+                            "modified": get_field("MODIFIED:", parts.get(3)),
+                            "created": get_field("CREATED:", parts.get(4)),
+                            "body": parts.get(5).map(|p| p.trim_start_matches("BODY:")).unwrap_or(""),
+                        });
+                        let json = serde_json::to_string_pretty(&note)?;
+                        Ok(text_result(json))
                     }
                 }
                 Err(e) => Ok(error_result(format!("Failed to read note: {e}"))),
@@ -505,6 +551,91 @@ fn handler_write_note() -> ToolHandler {
                     }
                 }
                 Err(e) => Ok(error_result(format!("Failed to create note: {e}"))),
+            }
+        })
+    })
+}
+
+fn handler_update_note() -> ToolHandler {
+    Arc::new(|args| {
+        Box::pin(async move {
+            let name = match args.get("name").and_then(|v| v.as_str()) {
+                Some(n) => n,
+                None => return Ok(error_result("name is required")),
+            };
+
+            let new_body = args.get("body").and_then(|v| v.as_str());
+            let new_name = args.get("new_name").and_then(|v| v.as_str());
+
+            if new_body.is_none() && new_name.is_none() {
+                return Ok(error_result(
+                    "At least one of 'body' or 'new_name' must be provided",
+                ));
+            }
+
+            let escaped_name = escape_applescript_string(name);
+
+            // Build the update commands conditionally
+            let mut update_commands = String::new();
+            let mut updated_parts: Vec<&str> = Vec::new();
+
+            if let Some(body) = new_body {
+                let escaped_body = escape_applescript_string(body);
+                update_commands.push_str(&format!("set body of n to \"{escaped_body}\"\n"));
+                updated_parts.push("body");
+            }
+            if let Some(rname) = new_name {
+                let escaped_new_name = escape_applescript_string(rname);
+                update_commands.push_str(&format!("set name of n to \"{escaped_new_name}\"\n"));
+                updated_parts.push("name");
+            }
+
+            let updated_desc = updated_parts.join(" and ");
+
+            // Iterate accounts > folders > notes (avoids the container bug
+            // that affects flat `every note whose name is` lookups).
+            let script = format!(
+                r#"
+                tell application "Notes"
+                    set noteFound to false
+                    set resultMsg to ""
+                    repeat with a in accounts
+                        set acctName to name of a
+                        repeat with f in folders of a
+                            set folderName to name of f
+                            repeat with n in notes of f
+                                if name of n is "{escaped_name}" then
+                                    {update_commands}
+                                    set noteFound to true
+                                    set resultMsg to "Updated {updated_desc} of note: {escaped_name} (folder: " & folderName & ", account: " & acctName & ")"
+                                    exit repeat
+                                end if
+                            end repeat
+                            if noteFound then exit repeat
+                        end repeat
+                        if noteFound then exit repeat
+                    end repeat
+
+                    if noteFound then
+                        return resultMsg
+                    else
+                        return "ERROR:No note found with name: {escaped_name}"
+                    end if
+                end tell
+                "#
+            );
+
+            match crate::macos::applescript::run_applescript(&script) {
+                Ok(output) => {
+                    if output.starts_with("ERROR:") {
+                        Ok(error_result(
+                            output.trim_start_matches("ERROR:").to_string(),
+                        ))
+                    } else {
+                        Ok(text_result(output))
+                    }
+                }
+                Err(e) => Ok(error_result(format!("Failed to update note: {e}"))),
             }
         })
     })
@@ -777,7 +908,7 @@ mod tests {
         let mut registry = ServiceRegistry::new();
         register(&mut registry);
         let tools = registry.list_tools();
-        assert_eq!(tools.len(), 8, "Expected exactly 8 notes tools");
+        assert_eq!(tools.len(), 9, "Expected exactly 9 notes tools");
 
         let names: Vec<_> = tools.iter().map(|t| t.name.as_ref()).collect();
         assert!(names.contains(&"productivity_notes_list_accounts"));
@@ -785,6 +916,7 @@ mod tests {
         assert!(names.contains(&"productivity_notes_search_notes"));
         assert!(names.contains(&"productivity_notes_read_note"));
         assert!(names.contains(&"productivity_notes_write_note"));
+        assert!(names.contains(&"productivity_notes_update_note"));
         assert!(names.contains(&"productivity_notes_delete_note"));
         assert!(names.contains(&"productivity_notes_restore_note"));
         assert!(names.contains(&"productivity_notes_open_note"));
@@ -887,9 +1019,10 @@ mod tests {
     #[tokio::test]
     async fn test_mock_read_note() {
         let mock = Arc::new(AssertingMock {
-            expected_fragment: "every note whose name is \"My Note\"".to_string(),
-            response: "NAME:My Note\nFOLDER:Notes\nCREATED:Jan 1\nMODIFIED:Jan 1\nBODY:\nHello"
-                .to_string(),
+            expected_fragment: "every note of f whose name is \"My Note\"".to_string(),
+            response:
+                "NAME:My Note||FOLDER:Notes||ACCOUNT:iCloud||MODIFIED:Jan 1||CREATED:Jan 1||BODY:Hello"
+                    .to_string(),
         });
 
         MOCK_RUNNER
@@ -902,8 +1035,10 @@ mod tests {
                 assert_eq!(result.is_error, Some(false));
 
                 let content = result.content[0].as_text().unwrap().text.as_str();
-                assert!(content.contains("NAME:My Note"));
-                assert!(content.contains("BODY:\nHello"));
+                assert!(content.contains("\"name\": \"My Note\""));
+                assert!(content.contains("\"folder\": \"Notes\""));
+                assert!(content.contains("\"account\": \"iCloud\""));
+                assert!(content.contains("\"body\": \"Hello\""));
             })
             .await;
     }
@@ -1089,6 +1224,58 @@ mod tests {
                 .text
                 .contains("title is required")
         );
+    }
+
+    #[tokio::test]
+    async fn test_mock_update_note() {
+        let mock = Arc::new(AssertingMock {
+            expected_fragment: "set body of n to".to_string(),
+            response: "Updated body of note: My Note (folder: Notes, account: iCloud)".to_string(),
+        });
+
+        MOCK_RUNNER
+            .scope(mock, async {
+                let handler = handler_update_note();
+                let mut args = HashMap::new();
+                args.insert("name".to_string(), json!("My Note"));
+                args.insert("body".to_string(), json!("<p>Updated content</p>"));
+
+                let result = handler(args).await.unwrap();
+                assert_eq!(result.is_error, Some(false));
+
+                let content = result.content[0].as_text().unwrap().text.as_str();
+                assert!(content.contains("Updated"));
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_validation_update_note_requires_name() {
+        let handler = handler_update_note();
+        let mut args = HashMap::new();
+        args.insert("body".to_string(), json!("New body"));
+
+        let result = handler(args).await.expect("Handler should not panic");
+        assert_eq!(result.is_error, Some(true));
+        assert!(
+            result.content[0]
+                .as_text()
+                .unwrap()
+                .text
+                .contains("name is required")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_validation_update_note_requires_change() {
+        let handler = handler_update_note();
+        let mut args = HashMap::new();
+        args.insert("name".to_string(), json!("My Note"));
+        // No body or new_name — nothing to update
+
+        let result = handler(args).await.expect("Handler should not panic");
+        assert_eq!(result.is_error, Some(true));
+        assert!(result.content[0].as_text().unwrap().text.contains("body"));
     }
 
     #[tokio::test]

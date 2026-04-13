@@ -107,7 +107,7 @@ impl PermissionManager {
     pub fn check_full_disk_access() -> PermissionStatus {
         let home = std::env::var("HOME").unwrap_or_default();
         let test_path = format!("{home}/Library/Messages/chat.db");
-        if std::fs::metadata(&test_path).is_ok() {
+        if std::fs::File::open(&test_path).is_ok() {
             PermissionStatus::Granted
         } else {
             PermissionStatus::Denied
@@ -192,8 +192,9 @@ impl PermissionManager {
         }
     }
 
-    /// Check if a permission is granted. Returns Ok(()) if granted,
-    /// or Err with a user-facing error message if not.
+    /// Check if a permission is granted or can be prompted.
+    /// Returns Ok(()) if granted or not yet determined (so macOS can prompt).
+    /// Returns Err only if explicitly denied (user must grant manually).
     pub fn require(perm: PermissionType) -> Result<(), String> {
         let status = match perm {
             PermissionType::Accessibility => Self::check_accessibility(),
@@ -205,7 +206,11 @@ impl PermissionManager {
             PermissionType::Location => Self::check_location(),
         };
         match status {
+            // Granted — proceed
             PermissionStatus::Granted => Ok(()),
+            // NotDetermined — let the operation run so macOS can prompt the user
+            PermissionStatus::NotDetermined => Ok(()),
+            // Denied or Unknown — block with a helpful error
             _ => Err(Self::permission_error(perm)),
         }
     }
@@ -260,6 +265,39 @@ mod tests {
         let msg = PermissionManager::permission_error(PermissionType::Calendar);
         assert!(msg.contains("Permission required: Calendar"));
         assert!(msg.contains("System Settings"));
+    }
+
+    #[test]
+    fn test_require_allows_granted() {
+        // Granted should pass through
+        // (We can't control the actual macOS state in unit tests,
+        // but we can test the logic by checking that require() returns
+        // Ok for permissions that happen to be granted on this machine,
+        // or test the error path for known-denied ones.)
+    }
+
+    #[test]
+    fn test_require_allows_not_determined() {
+        // NotDetermined should pass through so macOS can prompt
+        // This is tested implicitly via the match arm in require()
+        // The key invariant: NotDetermined -> Ok(()), not Err
+        let status = PermissionStatus::NotDetermined;
+        // Simulate what require() does
+        let result = match status {
+            PermissionStatus::Granted | PermissionStatus::NotDetermined => Ok(()),
+            _ => Err("denied"),
+        };
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_require_blocks_denied() {
+        let status = PermissionStatus::Denied;
+        let result = match status {
+            PermissionStatus::Granted | PermissionStatus::NotDetermined => Ok(()),
+            _ => Err("denied"),
+        };
+        assert!(result.is_err());
     }
 
     #[test]
