@@ -118,7 +118,7 @@ jobs:
           </plist>
           PLIST
 
-          # Sign the server binary with its own identifier
+          # Sign every executable in the bundle individually
           codesign --sign "$IDENTITY" \
             --options runtime \
             --entitlements macrelay.entitlements \
@@ -126,11 +126,18 @@ jobs:
             --force \
             "${CONTENTS}/MacOS/macrelay"
 
+          codesign --sign "$IDENTITY" \
+            --options runtime \
+            --entitlements macrelay.entitlements \
+            --identifier "com.macrelay.server" \
+            --force \
+            "${CONTENTS}/Resources/mcpb/server/macrelay"
+
           # Sign the full .app bundle (signs menubar binary with bundle ID)
           codesign --sign "$IDENTITY" \
             --options runtime \
             --entitlements macrelay.entitlements \
-            --deep --force \
+            --force \
             "$APP_DIR"
 
           # Verify
@@ -153,7 +160,7 @@ jobs:
               --apple-id "$APPLE_ID" \
               --password "$APPLE_ID_PASSWORD" \
               --team-id "$APPLE_TEAM_ID" \
-              --wait
+              --wait || { echo "Notarization REJECTED by Apple"; exit 1; }
 
             # Staple the notarization ticket to the .app (not the zip)
             # Staple needs the actual .app, so unzip, staple, re-zip
