@@ -6,7 +6,7 @@ use anyhow::Result;
 use rmcp::handler::server::ServerHandler;
 use rmcp::model::{
     CallToolRequestParams, CallToolResult, Content, ListToolsResult, PaginatedRequestParams,
-    ServerInfo,
+    ServerCapabilities, ServerInfo,
 };
 use rmcp::service::RequestContext;
 use rmcp::service::ServiceExt;
@@ -48,6 +48,7 @@ impl ServerHandler for MacRelayServer {
         ));
         info.server_info.name = display_name;
         info.server_info.version = env!("CARGO_PKG_VERSION").into();
+        info.capabilities = ServerCapabilities::builder().enable_tools().build();
         info
     }
 
