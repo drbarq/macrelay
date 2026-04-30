@@ -157,11 +157,18 @@ impl MenuBarConfig {
         } else {
             uninstall_claude_desktop_extension();
         }
-        // Claude Code: uses mcp.json config (no extension system)
+        // Claude Code: merges into ~/.claude.json (no extension system).
+        // Also remove the entry from the legacy (incorrect) ~/.claude/mcp.json
+        // path that earlier builds wrote to, so toggling Off cleans up both.
         if self.claude_code_enabled {
             self.write_claude_config_to_path(&claude_code_config_path(), &binary);
         } else {
             remove_macrelay_from_config(&claude_code_config_path());
+        }
+        let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+        let legacy_cc = PathBuf::from(home).join(".claude/mcp.json");
+        if legacy_cc.exists() {
+            remove_macrelay_from_config(&legacy_cc);
         }
     }
 
@@ -308,7 +315,7 @@ pub fn uninstall_claude_desktop_extension() {
 
 fn claude_code_config_path() -> PathBuf {
     let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-    PathBuf::from(home).join(".claude/mcp.json")
+    PathBuf::from(home).join(".claude.json")
 }
 
 fn macrelay_binary_path() -> String {

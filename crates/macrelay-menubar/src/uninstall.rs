@@ -50,10 +50,15 @@ pub fn uninstall() -> Vec<String> {
 
     // ── Claude Code config entry ─────────────────────────────────────
     remove_from_client_config(
-        &PathBuf::from(format!("{home}/.claude/mcp.json")),
+        &PathBuf::from(format!("{home}/.claude.json")),
         &mut actions,
         "Claude Code",
     );
+    // Also clean up the legacy (incorrect) path that earlier builds wrote to.
+    let legacy_cc = PathBuf::from(format!("{home}/.claude/mcp.json"));
+    if legacy_cc.exists() && std::fs::remove_file(&legacy_cc).is_ok() {
+        actions.push("Removed legacy ~/.claude/mcp.json".to_string());
+    }
 
     // ── Homebrew cask ─────────────────────────────────────────────────
     // GUI apps don't have /opt/homebrew/bin in PATH, so try both locations
