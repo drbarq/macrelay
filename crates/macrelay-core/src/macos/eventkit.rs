@@ -92,7 +92,7 @@ fn search_events_eventkit_blocking(
     // async (block-based completion handler); we wrap it in a dispatch
     // semaphore so we can wait synchronously. We're already inside a
     // tokio spawn_blocking, so the wait doesn't park an executor thread.
-    request_full_access_blocking(&store);
+    request_full_access_to_events_blocking(&store);
 
     // Hydrate the calendar list (after the access request, this includes
     // cloud sources). We don't use this list directly — eventsMatchingPredicate
@@ -248,7 +248,7 @@ pub async fn create_event(
 /// avoid hanging forever if the user ignores the dialog — that matches
 /// the existing AppleScript subprocess timeout philosophy and produces
 /// the same kind of recoverable error.
-fn request_full_access_blocking(store: &objc2_event_kit::EKEventStore) {
+pub(crate) fn request_full_access_to_events_blocking(store: &objc2_event_kit::EKEventStore) {
     use block2::RcBlock;
     use objc2::runtime::Bool;
     use objc2_foundation::NSError;

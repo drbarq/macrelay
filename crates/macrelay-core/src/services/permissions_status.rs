@@ -147,7 +147,8 @@ mod tests {
                         .as_str()
                         .expect("target status should be string");
                     match s {
-                        "granted" | "granted_write_only" | "denied" | "not_determined" | "unknown" => {}
+                        "granted" | "granted_write_only" | "denied" | "not_determined"
+                        | "unknown" => {}
                         _ => panic!(
                             "Unexpected automation status '{}' for target '{}'",
                             s, target

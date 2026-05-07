@@ -14,6 +14,25 @@ pub enum PermissionType {
     Location,
 }
 
+/// Result of a live probe against an EventKit-backed permission.
+///
+/// We use this to disambiguate the macOS 14+ `EKAuthorizationStatus=3`
+/// gotcha — see `PermissionManager::probe_calendar_read_access`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ProbeResult {
+    /// Probe query returned at least one event — read access confirmed.
+    Passed,
+    /// Probe query completed but returned zero events. Could mean the
+    /// user genuinely has no events in the probe window, or that the
+    /// access is write-only and reads silently drop. We report write-only
+    /// as the conservative answer.
+    FailedEmpty,
+    /// Probe query raised an error. Treated like FailedEmpty for
+    /// reporting purposes; surfaced separately for future logging.
+    #[allow(dead_code)]
+    FailedError,
+}
+
 /// Current status of a permission.
 ///
 /// `WriteOnly` is specific to Calendar/Reminders on macOS 14+: the user
@@ -81,11 +100,20 @@ pub struct PermissionManager;
 
 impl PermissionManager {
     /// Check the status of all permissions.
+    ///
+    /// For Calendar and Reminders, we use the probe-augmented variants
+    /// (`check_calendar_with_probe`, `check_reminders_with_probe`) so the
+    /// diagnostic output reflects empirical access on macOS 14+, not just
+    /// the unreliable framework getter. This makes the call slightly
+    /// more expensive (~100ms first time) but the result is honest.
     pub fn check_all() -> HashMap<PermissionType, PermissionStatus> {
         let mut statuses = HashMap::new();
         statuses.insert(PermissionType::Accessibility, Self::check_accessibility());
-        statuses.insert(PermissionType::Calendar, Self::check_calendar());
-        statuses.insert(PermissionType::Reminders, Self::check_reminders());
+        statuses.insert(PermissionType::Calendar, Self::check_calendar_with_probe());
+        statuses.insert(
+            PermissionType::Reminders,
+            Self::check_reminders_with_probe(),
+        );
         statuses.insert(PermissionType::Contacts, Self::check_contacts());
         statuses.insert(PermissionType::Location, Self::check_location());
         statuses.insert(
@@ -123,27 +151,51 @@ impl PermissionManager {
         }
     }
 
-    /// Check Calendar permission status.
+    /// Check Calendar permission status (fast path, framework-getter only).
     ///
-    /// macOS 14+ split the old "Authorized" tier into two: status=3 means
-    /// WriteOnly (can add events but cannot read), status=4 means
-    /// FullAccess. We surface both, because for read-heavy tools like
-    /// `pim_calendar_search_events` the difference is critical.
+    /// This is the cheap call used by handler-level permission gates. It
+    /// reflects what `EKEventStore::authorizationStatusForEntityType:`
+    /// reports — which on macOS 14+ is unreliable for the 3-vs-4 split
+    /// (see module-level docs). For diagnostic reporting where accuracy
+    /// matters, use `check_calendar_with_probe`.
     pub fn check_calendar() -> PermissionStatus {
         use objc2_event_kit::{EKEntityType, EKEventStore};
         let status = unsafe { EKEventStore::authorizationStatusForEntityType(EKEntityType::Event) };
         match status.0 {
-            0 => PermissionStatus::NotDetermined, // EKAuthorizationStatusNotDetermined
-            1 => PermissionStatus::Denied,        // EKAuthorizationStatusRestricted
-            2 => PermissionStatus::Denied,        // EKAuthorizationStatusDenied
-            3 => PermissionStatus::GrantedWriteOnly, // Authorized (legacy) / WriteOnly (macOS 14+)
-            4 => PermissionStatus::Granted,       // EKAuthorizationStatusFullAccess (macOS 14+)
+            0 => PermissionStatus::NotDetermined,
+            1 => PermissionStatus::Denied,
+            2 => PermissionStatus::Denied,
+            3 => PermissionStatus::GrantedWriteOnly, // see check_calendar_with_probe
+            4 => PermissionStatus::Granted,
             _ => PermissionStatus::Unknown,
         }
     }
 
-    /// Check Reminders permission status. See `check_calendar` for the
-    /// WriteOnly vs FullAccess split.
+    /// Check Calendar permission with a live probe to disambiguate
+    /// `EKAuthorizationStatus=3` on macOS 14+.
+    ///
+    /// `authorizationStatusForEntityType:` empirically lies on macOS 14+:
+    /// it can persistently return 3 (the legacy "Authorized" alias for
+    /// WriteOnly) even when TCC has `auth_value=4` (FullAccess) and live
+    /// queries succeed. When the raw status is 3, we run a wide-window
+    /// `eventsMatchingPredicate` probe; if it returns events, the user
+    /// actually has FullAccess and we report `Granted`.
+    ///
+    /// This call hits EventKit and can take ~100ms on first invocation
+    /// (it triggers `requestFullAccessToEventsWithCompletion:`). It's
+    /// intended for `system_permissions_status` and other diagnostic
+    /// surfaces, not for hot paths.
+    pub fn check_calendar_with_probe() -> PermissionStatus {
+        match Self::check_calendar() {
+            PermissionStatus::GrantedWriteOnly => match Self::probe_calendar_read_access() {
+                ProbeResult::Passed => PermissionStatus::Granted,
+                _ => PermissionStatus::GrantedWriteOnly,
+            },
+            other => other,
+        }
+    }
+
+    /// Check Reminders permission status (fast path).
     pub fn check_reminders() -> PermissionStatus {
         use objc2_event_kit::{EKEntityType, EKEventStore};
         let status =
@@ -155,6 +207,61 @@ impl PermissionManager {
             3 => PermissionStatus::GrantedWriteOnly,
             4 => PermissionStatus::Granted,
             _ => PermissionStatus::Unknown,
+        }
+    }
+
+    /// Reminders equivalent of `check_calendar_with_probe`. Currently
+    /// returns the framework getter result unchanged — we don't yet
+    /// implement a Reminders read probe (that requires
+    /// `fetchRemindersMatchingPredicate:completion:`, a different async
+    /// API). When we do, this is the surface to update.
+    pub fn check_reminders_with_probe() -> PermissionStatus {
+        Self::check_reminders()
+    }
+
+    /// Result of a live read probe against EKEventStore.
+    ///
+    /// `Passed` means we got events back — read access is real, ignore
+    /// whatever the framework getter said. `FailedEmpty` means the query
+    /// completed but returned 0 events; we can't distinguish "no events
+    /// in the probe window" from "write-only access silently dropping
+    /// reads," so we conservatively report write-only. `FailedError`
+    /// means the call itself errored — extremely rare.
+    ///
+    /// Note that this result is *informational*. We report it to give
+    /// the user a more honest picture than the framework getter, but a
+    /// single probe is not 100% conclusive. The probe is wide enough
+    /// (~365 days) that empty results from a real account are rare.
+    #[cfg(target_os = "macos")]
+    fn probe_calendar_read_access() -> ProbeResult {
+        use objc2_event_kit::{EKEntityType, EKEventStore};
+        use objc2_foundation::NSDate;
+
+        let store: objc2::rc::Retained<EKEventStore> = unsafe { EKEventStore::new() };
+
+        // Force EventKit to hydrate cloud sources before the probe — same
+        // reason eventkit::search_events_eventkit_blocking does it.
+        crate::macos::eventkit::request_full_access_to_events_blocking(&store);
+        let _ = unsafe { store.calendarsForEntityType(EKEntityType::Event) };
+
+        // Wide window: 1 year on either side of now. If the user has any
+        // events at all, this should match. Probe is read-only; we don't
+        // care about the contents, only the count.
+        let now = NSDate::now();
+        let past = NSDate::dateWithTimeIntervalSinceNow(-365.0 * 86400.0);
+        let future = NSDate::dateWithTimeIntervalSinceNow(365.0 * 86400.0);
+        let predicate = unsafe {
+            store.predicateForEventsWithStartDate_endDate_calendars(&past, &future, None)
+        };
+        // We use `now` to avoid an unused-variable warning on the trivial
+        // path; the actual query uses past/future.
+        let _ = now;
+        let events = unsafe { store.eventsMatchingPredicate(&predicate) };
+
+        if events.is_empty() {
+            ProbeResult::FailedEmpty
+        } else {
+            ProbeResult::Passed
         }
     }
 
