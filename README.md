@@ -219,6 +219,8 @@ MacRelay uses AppleScript to interact with native apps. macOS will prompt for Au
 
 Use the `permissions_status` tool to check all states at once.
 
+**Calendar requires Full Access on macOS 14+.** When MacRelay first prompts for Calendars permission, the system may grant *Add Only* access. Under Add Only, `search_events` and `find_available_times` return zero events from cloud calendars (iCloud, Google, Exchange) silently — no error, just empty results. If you see this, open *System Settings → Privacy & Security → Calendars*, find MacRelay, and switch the dropdown to **Full Access**. The same applies to Reminders.
+
 ## Testing
 
 MacRelay uses a three-tier testing strategy (see [docs/TESTING.md](docs/TESTING.md) for the full strategy, audit, and per-service coverage report).

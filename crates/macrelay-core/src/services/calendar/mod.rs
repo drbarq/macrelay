@@ -33,15 +33,15 @@ pub fn register(registry: &mut ServiceRegistry) {
                 "properties": {
                     "start_date": {
                         "type": "string",
-                        "description": "Start of search range as Unix timestamp (seconds). Defaults to now."
+                        "description": "Start of search range as Unix timestamp (seconds). Defaults to now. Past timestamps are accepted for historical queries."
                     },
                     "end_date": {
                         "type": "string",
-                        "description": "End of search range as Unix timestamp (seconds). Defaults to 7 days from now."
+                        "description": "End of search range as Unix timestamp (seconds). If only start_date is given, defaults to start + 7 days; otherwise defaults to 7 days from now."
                     },
                     "query": {
                         "type": "string",
-                        "description": "Optional text to filter events by title."
+                        "description": "Optional text to filter events by title (case-insensitive substring)."
                     },
                     "limit": {
                         "type": "integer",
@@ -243,12 +243,16 @@ fn handler_search_events() -> ToolHandler {
             if let Err(msg) = PermissionManager::require(PermissionType::Calendar) {
                 return Ok(error_result(msg));
             }
-            let days_ahead = 7u32; // Default 7 days
             let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(50) as usize;
-
             let query_filter = args.get("query").and_then(|v| v.as_str());
 
-            match eventkit::search_events_applescript(days_ahead, query_filter).await {
+            let now_ts = current_unix_secs();
+            let (start_ts, end_ts) = match parse_search_window(&args, now_ts) {
+                Ok(window) => window,
+                Err(msg) => return Ok(error_result(msg)),
+            };
+
+            match eventkit::search_events_in_range(start_ts, end_ts, query_filter).await {
                 Ok(mut events) => {
                     events.truncate(limit);
                     if events.is_empty() {
@@ -265,6 +269,58 @@ fn handler_search_events() -> ToolHandler {
             }
         })
     })
+}
+
+/// Wallclock-now as Unix epoch seconds. Extracted so `parse_search_window`
+/// can be deterministic in tests.
+fn current_unix_secs() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+/// Parse `start_date`/`end_date` from the search_events args.
+///
+/// Defaults:
+/// - both omitted -> `(now, now + 7d)`
+/// - only `start_date` -> `(start, start + 7d)`
+/// - only `end_date`   -> `(now, end)`
+/// - both present      -> `(start, end)`
+///
+/// Returns `Err(message)` if either present field can't be parsed as a
+/// Unix timestamp. Validation of `start <= end` is intentionally not
+/// enforced here — EventKit's predicate accepts inverted ranges and just
+/// returns zero events, which is the right behaviour ("you asked for an
+/// empty window, you got an empty window") and matches what the previous
+/// AppleScript path did.
+fn parse_search_window(
+    args: &std::collections::HashMap<String, serde_json::Value>,
+    now_ts: i64,
+) -> Result<(i64, i64), String> {
+    const DEFAULT_WINDOW_SECS: i64 = 7 * 86400;
+
+    let parse_ts = |key: &str| -> Result<Option<i64>, String> {
+        match args.get(key).and_then(|v| v.as_str()) {
+            None => Ok(None),
+            Some(s) => s
+                .parse::<i64>()
+                .map(Some)
+                .map_err(|_| format!("{key} must be a Unix timestamp (integer seconds)")),
+        }
+    };
+
+    let start_opt = parse_ts("start_date")?;
+    let end_opt = parse_ts("end_date")?;
+
+    let (start_ts, end_ts) = match (start_opt, end_opt) {
+        (None, None) => (now_ts, now_ts + DEFAULT_WINDOW_SECS),
+        (Some(s), None) => (s, s + DEFAULT_WINDOW_SECS),
+        (None, Some(e)) => (now_ts, e),
+        (Some(s), Some(e)) => (s, e),
+    };
+
+    Ok((start_ts, end_ts))
 }
 
 fn handler_create_event() -> ToolHandler {
@@ -626,151 +682,127 @@ fn handler_find_available_times() -> ToolHandler {
             let work_start_hour = if working_hours_only { 9 } else { 0 };
             let work_end_hour = if working_hours_only { 17 } else { 24 };
 
-            // AppleScript fetches all events in the range; we process free slots from the output
-            let script = format!(
-                r#"
-                set rangeStartEpoch to {start_ts} as number
-                set rangeEndEpoch to {end_ts} as number
+            // Fetch busy intervals via EventKit. The previous AppleScript
+            // implementation iterated `every event of cal whose start date
+            // >= ...` across every calendar, which is an O(N) linear scan
+            // per calendar (~147s/calendar measured) — see the same note
+            // on `search_events_in_range` for the full story. EventKit
+            // talks to Calendar's indexed SQLite store directly: same data,
+            // milliseconds instead of minutes.
+            let busy = match eventkit::fetch_busy_intervals(start_ts, end_ts).await {
+                Ok(b) => b,
+                Err(e) => return Ok(error_result(format!("Failed to find available times: {e}"))),
+            };
 
-                set rangeStart to current date
-                set time of rangeStart to 0
-                set rangeStart to rangeStart - (rangeStart - (date "Thursday, January 1, 1970 at 12:00:00 AM")) + rangeStartEpoch
+            let range_start: i64 = start_ts;
+            let range_end: i64 = end_ts;
+            let min_duration_secs = (min_duration_minutes * 60) as i64;
 
-                set rangeEnd to current date
-                set time of rangeEnd to 0
-                set rangeEnd to rangeEnd - (rangeEnd - (date "Thursday, January 1, 1970 at 12:00:00 AM")) + rangeEndEpoch
-
-                set busyTimes to {{}}
-
-                tell application "Calendar"
-                    repeat with cal in calendars
-                        set evts to (every event of cal whose start date >= rangeStart and start date <= rangeEnd)
-                        repeat with evt in evts
-                            set evtStart to start date of evt
-                            set evtEnd to end date of evt
-                            -- Convert to epoch seconds
-                            set epochRef to date "Thursday, January 1, 1970 at 12:00:00 AM"
-                            set startSec to (evtStart - epochRef)
-                            set endSec to (evtEnd - epochRef)
-                            set end of busyTimes to (startSec as text) & "," & (endSec as text)
-                        end repeat
-                    end repeat
-                end tell
-
-                set output to ""
-                repeat with i from 1 to count of busyTimes
-                    if i > 1 then set output to output & "|"
-                    set output to output & (item i of busyTimes)
-                end repeat
-
-                return output
-                "#
+            let free_slots = compute_free_slots(
+                busy,
+                range_start,
+                range_end,
+                min_duration_secs,
+                working_hours_only,
+                work_start_hour,
+                work_end_hour,
             );
 
-            match crate::macos::applescript::run_applescript(&script) {
-                Ok(raw_output) => {
-                    let range_start: i64 = start_ts;
-                    let range_end: i64 = end_ts;
-                    let min_duration_secs = (min_duration_minutes * 60) as i64;
-
-                    // Parse busy intervals from the AppleScript output
-                    let mut busy: Vec<(i64, i64)> = Vec::new();
-                    if !raw_output.trim().is_empty() {
-                        for pair in raw_output.trim().split('|') {
-                            let parts: Vec<&str> = pair.split(',').collect();
-                            if parts.len() == 2
-                                && let (Ok(s), Ok(e)) = (
-                                    parts[0].trim().parse::<i64>(),
-                                    parts[1].trim().parse::<i64>(),
-                                )
-                            {
-                                busy.push((s, e));
-                            }
-                        }
-                    }
-
-                    // Sort by start time
-                    busy.sort_by_key(|&(s, _)| s);
-
-                    // Merge overlapping intervals
-                    let mut merged: Vec<(i64, i64)> = Vec::new();
-                    for (s, e) in &busy {
-                        if let Some(last) = merged.last_mut()
-                            && *s <= last.1
-                        {
-                            last.1 = last.1.max(*e);
-                            continue;
-                        }
-                        merged.push((*s, *e));
-                    }
-
-                    // Find free slots between busy intervals
-                    let mut free_slots: Vec<serde_json::Value> = Vec::new();
-                    let mut cursor = range_start;
-
-                    // Helper closure to clamp to working hours
-                    let clamp_to_working = |epoch: i64, is_end: bool| -> i64 {
-                        if !working_hours_only {
-                            return epoch;
-                        }
-                        // Determine the hour of day for this epoch
-                        let secs_in_day = epoch.rem_euclid(86400);
-                        let hour = secs_in_day / 3600;
-                        let day_start = epoch - secs_in_day;
-                        if hour < work_start_hour {
-                            day_start + work_start_hour * 3600
-                        } else if hour >= work_end_hour {
-                            if is_end {
-                                day_start + work_end_hour * 3600
-                            } else {
-                                // Push to next day's work start
-                                day_start + 86400 + work_start_hour * 3600
-                            }
-                        } else {
-                            epoch
-                        }
-                    };
-
-                    for (busy_start, busy_end) in &merged {
-                        let slot_start = clamp_to_working(cursor, false);
-                        let slot_end = clamp_to_working(*busy_start, true);
-                        if slot_end - slot_start >= min_duration_secs && slot_start < slot_end {
-                            free_slots.push(json!({
-                                "start": slot_start,
-                                "end": slot_end,
-                                "duration_minutes": (slot_end - slot_start) / 60
-                            }));
-                        }
-                        cursor = *busy_end;
-                    }
-
-                    // Final slot from last busy end to range end
-                    let slot_start = clamp_to_working(cursor, false);
-                    let slot_end = clamp_to_working(range_end, true);
-                    if slot_end - slot_start >= min_duration_secs && slot_start < slot_end {
-                        free_slots.push(json!({
-                            "start": slot_start,
-                            "end": slot_end,
-                            "duration_minutes": (slot_end - slot_start) / 60
-                        }));
-                    }
-
-                    if free_slots.is_empty() {
-                        Ok(text_result(
-                            "No available time slots found in the specified range.",
-                        ))
-                    } else {
-                        let json = serde_json::to_string_pretty(&free_slots)?;
-                        Ok(text_result(format!(
-                            "Found {} available time slot(s):\n\n{json}",
-                            free_slots.len()
-                        )))
-                    }
-                }
-                Err(e) => Ok(error_result(format!("Failed to find available times: {e}"))),
+            if free_slots.is_empty() {
+                Ok(text_result(
+                    "No available time slots found in the specified range.",
+                ))
+            } else {
+                let json = serde_json::to_string_pretty(&free_slots)?;
+                Ok(text_result(format!(
+                    "Found {} available time slot(s):\n\n{json}",
+                    free_slots.len()
+                )))
             }
         })
     })
+}
+
+/// Compute free slots from a list of busy intervals. Pure function,
+/// extracted so the working-hours and merge logic is unit-testable
+/// without going through EventKit. Returns JSON values in the same
+/// shape the handler emits.
+fn compute_free_slots(
+    mut busy: Vec<(i64, i64)>,
+    range_start: i64,
+    range_end: i64,
+    min_duration_secs: i64,
+    working_hours_only: bool,
+    work_start_hour: i64,
+    work_end_hour: i64,
+) -> Vec<serde_json::Value> {
+    busy.sort_by_key(|&(s, _)| s);
+
+    // Merge overlapping intervals
+    let mut merged: Vec<(i64, i64)> = Vec::new();
+    for (s, e) in &busy {
+        if let Some(last) = merged.last_mut()
+            && *s <= last.1
+        {
+            last.1 = last.1.max(*e);
+            continue;
+        }
+        merged.push((*s, *e));
+    }
+
+    // Helper: clamp an epoch into the working-hours band. `is_end=false`
+    // means "this is a slot start, push forward to next valid time";
+    // `is_end=true` means "this is a slot end, pull back to last valid
+    // time in the same day."
+    let clamp_to_working = |epoch: i64, is_end: bool| -> i64 {
+        if !working_hours_only {
+            return epoch;
+        }
+        let secs_in_day = epoch.rem_euclid(86400);
+        let hour = secs_in_day / 3600;
+        let day_start = epoch - secs_in_day;
+        if hour < work_start_hour {
+            day_start + work_start_hour * 3600
+        } else if hour >= work_end_hour {
+            if is_end {
+                day_start + work_end_hour * 3600
+            } else {
+                // Push to next day's work start
+                day_start + 86400 + work_start_hour * 3600
+            }
+        } else {
+            epoch
+        }
+    };
+
+    let mut free_slots: Vec<serde_json::Value> = Vec::new();
+    let mut cursor = range_start;
+
+    for (busy_start, busy_end) in &merged {
+        let slot_start = clamp_to_working(cursor, false);
+        let slot_end = clamp_to_working(*busy_start, true);
+        if slot_end - slot_start >= min_duration_secs && slot_start < slot_end {
+            free_slots.push(json!({
+                "start": slot_start,
+                "end": slot_end,
+                "duration_minutes": (slot_end - slot_start) / 60
+            }));
+        }
+        cursor = *busy_end;
+    }
+
+    // Final slot from last busy end to range end
+    let slot_start = clamp_to_working(cursor, false);
+    let slot_end = clamp_to_working(range_end, true);
+    if slot_end - slot_start >= min_duration_secs && slot_start < slot_end {
+        free_slots.push(json!({
+            "start": slot_start,
+            "end": slot_end,
+            "duration_minutes": (slot_end - slot_start) / 60
+        }));
+    }
+
+    free_slots
 }
 
 #[cfg(test)]
@@ -1062,53 +1094,121 @@ mod tests {
             .await;
     }
 
+    /// Tier 1 — exercises the pure free-slot calculator without going
+    /// through EventKit. This replaced the prior Tier 2 mock test that
+    /// injected an AppleScript response: after the EventKit migration
+    /// `find_available_times` no longer issues any AppleScript, so
+    /// MOCK_RUNNER is never consulted and the asserted-fragment approach
+    /// can't fire. The free-slot math is the part actually worth
+    /// testing — `fetch_busy_intervals` is verified separately by the
+    /// Tier 3 smoke below.
+    #[test]
+    fn test_compute_free_slots_with_working_hours() {
+        // Range: Apr 10 08:00 UTC to Apr 10 20:00 UTC
+        // Busy:  Apr 10 10:00 UTC to Apr 10 11:00 UTC
+        // Work hours: 09:00 to 17:00
+        // Expected:
+        //   Slot 1: 09:00 → 10:00 (60 min)
+        //   Slot 2: 11:00 → 17:00 (360 min)
+        let busy = vec![(1712743200, 1712746800)];
+        let slots = compute_free_slots(busy, 1712736000, 1712779200, 30 * 60, true, 9, 17);
+
+        assert_eq!(slots.len(), 2);
+        assert_eq!(slots[0]["start"], 1712739600);
+        assert_eq!(slots[0]["end"], 1712743200);
+        assert_eq!(slots[1]["start"], 1712746800);
+        assert_eq!(slots[1]["end"], 1712768400);
+    }
+
+    #[test]
+    fn test_compute_free_slots_no_busy() {
+        // Empty calendar → one big free slot covering the working window.
+        let slots = compute_free_slots(vec![], 1712736000, 1712779200, 30 * 60, true, 9, 17);
+        assert_eq!(slots.len(), 1);
+        assert_eq!(slots[0]["start"], 1712739600);
+        assert_eq!(slots[0]["end"], 1712768400);
+    }
+
+    #[test]
+    fn test_compute_free_slots_skips_below_min_duration() {
+        // Two back-to-back busy blocks with a 15-min gap; min_duration=30
+        // should drop the gap.
+        let busy = vec![(1712743200, 1712746800), (1712747700, 1712750400)];
+        let slots = compute_free_slots(busy, 1712736000, 1712779200, 30 * 60, false, 0, 24);
+        // Expected slots:
+        //   range_start (08:00) → first busy (10:00) = 120 min ✓
+        //   gap between (11:00 → 11:15) = 15 min ✗ (filtered)
+        //   second busy end (12:00) → range_end (20:00) = 480 min ✓
+        assert_eq!(slots.len(), 2);
+    }
+
+    /// Tier 1 — `parse_search_window` defaulting matrix.
+    #[test]
+    fn test_parse_search_window_defaults() {
+        let now = 1_700_000_000_i64;
+        let week = 7 * 86400;
+
+        // Both omitted -> (now, now + 7d)
+        let args = HashMap::new();
+        assert_eq!(parse_search_window(&args, now), Ok((now, now + week)));
+
+        // Only start -> (start, start + 7d)
+        let mut args = HashMap::new();
+        args.insert("start_date".to_string(), json!("1262304000"));
+        assert_eq!(
+            parse_search_window(&args, now),
+            Ok((1262304000, 1262304000 + week))
+        );
+
+        // Only end -> (now, end)
+        let mut args = HashMap::new();
+        args.insert("end_date".to_string(), json!("1293753599"));
+        assert_eq!(parse_search_window(&args, now), Ok((now, 1293753599)));
+
+        // Both -> verbatim
+        let mut args = HashMap::new();
+        args.insert("start_date".to_string(), json!("100"));
+        args.insert("end_date".to_string(), json!("200"));
+        assert_eq!(parse_search_window(&args, now), Ok((100, 200)));
+    }
+
+    #[test]
+    fn test_parse_search_window_rejects_garbage() {
+        let mut args = HashMap::new();
+        args.insert("start_date".to_string(), json!("not-a-number"));
+        let err = parse_search_window(&args, 1_700_000_000).expect_err("should reject");
+        assert!(err.contains("start_date"));
+        assert!(err.contains("Unix timestamp"));
+    }
+
+    /// Tier 3 (integration) — replaces the prior AppleScript-mock based
+    /// test for `find_available_times`. Hits the real EventKit framework
+    /// against the user's Calendar database. Run locally with
+    /// `cargo test -p macrelay-core --lib -- --include-ignored
+    ///   test_find_available_times_eventkit_smoke`.
     #[tokio::test]
-    async fn test_mock_find_available_times() {
-        let mock = Arc::new(AssertingMock {
-            expected_fragments: vec![
-                "set rangeStartEpoch to 1712736000",
-                "set rangeEndEpoch to 1712779200",
-                "busyTimes",
-            ],
-            response: "1712743200,1712746800".to_string(),
-        });
+    #[ignore] // Requires Calendar permission + a real EKEventStore — local only
+    async fn test_find_available_times_eventkit_smoke() {
+        let handler = handler_find_available_times();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        let mut args = HashMap::new();
+        args.insert("start_date".to_string(), json!(now.to_string()));
+        args.insert("end_date".to_string(), json!((now + 86400).to_string()));
+        args.insert("working_hours_only".to_string(), json!(false));
 
-        MOCK_RUNNER
-            .scope(mock, async {
-                let handler = handler_find_available_times();
-                let mut args = HashMap::new();
-                // Range: Apr 10 08:00 UTC to Apr 10 20:00 UTC
-                args.insert("start_date".to_string(), json!("1712736000"));
-                args.insert("end_date".to_string(), json!("1712779200"));
-                args.insert("working_hours_only".to_string(), json!(true));
+        let result = handler(args).await.expect("Handler should not fail");
 
-                let result = handler(args).await.expect("Handler should not fail");
-                assert_eq!(result.is_error, Some(false));
-
-                let content = result.content[0].as_text().unwrap().text.as_str();
-                assert!(content.contains("Found"));
-
-                // Extract JSON
-                let json_start = content.find('[').expect("Expected JSON array start");
-                let slots: Vec<serde_json::Value> = serde_json::from_str(&content[json_start..])
-                    .expect("Expected valid JSON array");
-
-                // Busy: 1712743200 to 1712746800 (10:00 to 11:00)
-                // Range: 1712736000 to 1712779200 (08:00 to 20:00)
-                // Work hours: 09:00 to 17:00
-                // Work Start: 1712739600 (09:00)
-                // Work End: 1712768400 (17:00)
-
-                // Slot 1: Work Start (1712739600) to Busy Start (1712743200) -> 3600s = 60 min
-                // Slot 2: Busy End (1712746800) to Work End (1712768400) -> 21600s = 360 min
-
-                assert_eq!(slots.len(), 2);
-                assert_eq!(slots[0]["start"], 1712739600);
-                assert_eq!(slots[0]["end"], 1712743200);
-                assert_eq!(slots[1]["start"], 1712746800);
-                assert_eq!(slots[1]["end"], 1712768400);
-            })
-            .await;
+        let content = result.content[0].as_text().unwrap().text.as_str();
+        assert!(
+            content.starts_with("Found ")
+                || content.contains("No available time slots")
+                || content.to_lowercase().contains("permission")
+                || content.to_lowercase().contains("not authorized"),
+            "unexpected content: {content}"
+        );
     }
 
     /// When osascript fails, the handler must return a graceful error result

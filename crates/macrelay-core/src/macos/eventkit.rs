@@ -33,7 +33,7 @@ pub async fn list_calendars() -> Result<Vec<CalendarInfo>> {
     Ok(calendars)
 }
 
-/// Search calendar events using EventKit (the proper macOS API).
+/// Search calendar events in `[start_ts, end_ts]` using EventKit.
 ///
 /// The previous implementation used AppleScript with `every event of c
 /// whose start date >= now and start date <= endDate`, iterated across
@@ -54,33 +54,43 @@ pub async fn list_calendars() -> Result<Vec<CalendarInfo>> {
 /// is short-lived (constructed and dropped within this function) — that's
 /// fine for read-only queries and avoids any cross-thread concerns with
 /// EKEventStore's notification observers.
-pub async fn search_events_applescript(
-    days_ahead: u32,
+///
+/// `start_ts` and `end_ts` are Unix epoch seconds. Negative values (events
+/// before 1970) and far-future values are accepted — `NSDate` happily
+/// represents anything an `f64` can express; no clamping needed.
+pub async fn search_events_in_range(
+    start_ts: i64,
+    end_ts: i64,
     query: Option<&str>,
 ) -> Result<Vec<EventInfo>> {
-    // The function name is unchanged so the call site in calendar/mod.rs
-    // doesn't need to change. Despite the name, no AppleScript runs here
-    // anymore. (Renaming the function would be a wider diff and break the
-    // callable surface — kept stable on purpose.)
     let query_owned = query.map(|s| s.to_lowercase());
-    tokio::task::spawn_blocking(move || search_events_eventkit_blocking(days_ahead, query_owned))
+    tokio::task::spawn_blocking(move || {
+        search_events_eventkit_blocking(start_ts, end_ts, query_owned)
+    })
+    .await
+    .map_err(|e| anyhow::anyhow!("spawn_blocking join failed: {e}"))?
+}
+
+/// Fetch (start, end) busy intervals — used by `find_available_times`.
+///
+/// Same EventKit query as `search_events_in_range`, but stripped down to
+/// raw epoch-second pairs since the free-slot calculator only needs the
+/// occupancy timeline. Avoids round-tripping through `EventInfo` and the
+/// `NSDateFormatter` string formatting we don't use here.
+pub async fn fetch_busy_intervals(start_ts: i64, end_ts: i64) -> Result<Vec<(i64, i64)>> {
+    tokio::task::spawn_blocking(move || fetch_busy_intervals_blocking(start_ts, end_ts))
         .await
         .map_err(|e| anyhow::anyhow!("spawn_blocking join failed: {e}"))?
 }
 
-/// Synchronous EventKit query. Must run inside `spawn_blocking`.
-fn search_events_eventkit_blocking(
-    days_ahead: u32,
-    query_lc: Option<String>,
-) -> Result<Vec<EventInfo>> {
+/// Open an `EKEventStore`, complete the macOS 14+ Full Access handshake,
+/// and check authorization. Common preamble shared by both EventKit
+/// query paths. On `AccessRequestOutcome::TimedOut` we surface a
+/// Calendar-specific error; the bug report flagged the prior wording
+/// (which mentioned AppleScript / Automation) as misleading.
+fn open_event_store_with_access() -> Result<objc2::rc::Retained<objc2_event_kit::EKEventStore>> {
     use objc2_event_kit::{EKEntityType, EKEventStore};
-    use objc2_foundation::{NSDate, NSDateFormatter};
 
-    // EventKit auth is checked at the handler level via PermissionManager;
-    // by the time we get here, the store should be usable. If it isn't,
-    // eventsMatchingPredicate will return an empty array and we'll just
-    // return zero events — same behaviour as the old AppleScript path
-    // wrapping `try` blocks around inaccessible calendars.
     let store: objc2::rc::Retained<EKEventStore> = unsafe { EKEventStore::new() };
 
     // macOS 14+ requires every process to call requestFullAccessToEvents
@@ -89,24 +99,30 @@ fn search_events_eventkit_blocking(
     // this call, calendarsForEntityType returns only local calendars
     // (Birthdays, on-device), and eventsMatchingPredicate returns 0 events
     // for queries that should hit iCloud-hosted events. The request is
-    // async (block-based completion handler); we wrap it in a dispatch
-    // semaphore so we can wait synchronously. We're already inside a
+    // async (block-based completion handler); we wrap it in an mpsc
+    // channel so we can wait synchronously. We're already inside a
     // tokio spawn_blocking, so the wait doesn't park an executor thread.
-    request_full_access_to_events_blocking(&store);
-
-    // Hydrate the calendar list (after the access request, this includes
-    // cloud sources). We don't use this list directly — eventsMatchingPredicate
-    // with `calendars: nil` searches everything — but reading it warms up
-    // the store and is also useful for the diagnostic eprintln below.
-    let cals = unsafe { store.calendarsForEntityType(EKEntityType::Event) };
+    match request_full_access_to_events_blocking(&store) {
+        AccessRequestOutcome::Completed => {}
+        AccessRequestOutcome::TimedOut => {
+            return Err(anyhow::anyhow!(
+                "Calendar Full Access dialog wasn't answered within 30s. \
+                 Open System Settings > Privacy & Security > Calendars > \
+                 MacRelay and switch to 'Full Access', then retry. (This \
+                 is the EventKit access prompt, not the Automation prompt.)"
+            ));
+        }
+    }
 
     let auth = unsafe { EKEventStore::authorizationStatusForEntityType(EKEntityType::Event) };
+    let cals = unsafe { store.calendarsForEntityType(EKEntityType::Event) };
     tracing::debug!(
         target: "macrelay::calendar",
         auth = auth.0,
         calendars = cals.len(),
         "EventKit query starting"
     );
+
     // The legacy `authorizationStatusForEntityType:` API can return a
     // stale value on macOS 14+: even when TCC.db has auth_value=4
     // (FullAccess), this getter sometimes still returns 3 (the old
@@ -114,15 +130,10 @@ fn search_events_eventkit_blocking(
     // refreshes its in-process cache. We saw this empirically — TCC
     // showed 4, the System Settings UI showed Full Access, but
     // EKAuthorizationStatus stayed at 3 across multiple binary launches.
-    // We don't gate on the return value any more for that reason; we
-    // attempt the query and let `eventsMatchingPredicate` answer
-    // authoritatively. If access is genuinely missing, it returns an
-    // empty array and we surface a useful empty-result message; if
-    // access is present, we get events.
+    // We only trust the unambiguous denied values (0/1/2); 3/4 we let
+    // eventsMatchingPredicate answer authoritatively.
     if matches!(auth.0, 0..=2) {
-        // 0=NotDetermined, 1=Restricted, 2=Denied — these we trust
-        // immediately. The ambiguous-on-mac14+ values (3, 4) we let
-        // eventsMatchingPredicate decide.
+        // 0=NotDetermined, 1=Restricted, 2=Denied
         return Err(anyhow::anyhow!(
             "Calendar access not authorized (EKAuthorizationStatus={}). \
              Open System Settings > Privacy & Security > Calendars and \
@@ -131,19 +142,30 @@ fn search_events_eventkit_blocking(
         ));
     }
 
-    // Build the date range. NSDate uses NSTimeInterval (seconds since 1970).
-    // Per objc2-foundation 0.3, `NSDate::now` and `dateWithTimeIntervalSinceNow`
-    // are safe (no `unsafe` block needed) — they're side-effect free factory
-    // methods. The objc2 binding marks methods `unsafe` only when they can
-    // violate Rust safety invariants; pure value constructors do not.
-    let now = NSDate::now();
-    let end = NSDate::dateWithTimeIntervalSinceNow(days_ahead as f64 * 86400.0);
+    Ok(store)
+}
+
+/// Synchronous EventKit query. Must run inside `spawn_blocking`.
+fn search_events_eventkit_blocking(
+    start_ts: i64,
+    end_ts: i64,
+    query_lc: Option<String>,
+) -> Result<Vec<EventInfo>> {
+    use objc2_foundation::{NSDate, NSDateFormatter};
+
+    let store = open_event_store_with_access()?;
+
+    // Build the date range. NSDate uses NSTimeInterval (seconds since 1970,
+    // f64). Per objc2-foundation 0.3, `dateWithTimeIntervalSince1970` is
+    // safe (no `unsafe` block needed) — pure value constructor.
+    let start = NSDate::dateWithTimeIntervalSince1970(start_ts as f64);
+    let end = NSDate::dateWithTimeIntervalSince1970(end_ts as f64);
 
     // `calendars: nil` searches every calendar the user has access to —
     // exactly what the old script did with `repeat with c in calendars`,
     // but pushed into the indexed query path.
     let predicate =
-        unsafe { store.predicateForEventsWithStartDate_endDate_calendars(&now, &end, None) };
+        unsafe { store.predicateForEventsWithStartDate_endDate_calendars(&start, &end, None) };
     let event_array = unsafe { store.eventsMatchingPredicate(&predicate) };
 
     // Date formatter for output strings. We keep the same shape as the
@@ -202,6 +224,34 @@ fn search_events_eventkit_blocking(
     Ok(events)
 }
 
+/// Synchronous EventKit busy-interval fetch. Must run inside `spawn_blocking`.
+fn fetch_busy_intervals_blocking(start_ts: i64, end_ts: i64) -> Result<Vec<(i64, i64)>> {
+    use objc2_foundation::NSDate;
+
+    let store = open_event_store_with_access()?;
+
+    let start = NSDate::dateWithTimeIntervalSince1970(start_ts as f64);
+    let end = NSDate::dateWithTimeIntervalSince1970(end_ts as f64);
+
+    let predicate =
+        unsafe { store.predicateForEventsWithStartDate_endDate_calendars(&start, &end, None) };
+    let event_array = unsafe { store.eventsMatchingPredicate(&predicate) };
+
+    let mut intervals = Vec::with_capacity(event_array.len());
+    for event in event_array.iter() {
+        let s = unsafe { event.startDate() };
+        let e = unsafe { event.endDate() };
+        // `timeIntervalSince1970` is a pure value getter and binds as
+        // safe in objc2-foundation 0.3 — same reason `dateWithTimeInterval…`
+        // doesn't need an `unsafe` block above.
+        let s_secs = s.timeIntervalSince1970() as i64;
+        let e_secs = e.timeIntervalSince1970() as i64;
+        intervals.push((s_secs, e_secs));
+    }
+
+    Ok(intervals)
+}
+
 /// Create a calendar event using AppleScript.
 pub async fn create_event(
     title: &str,
@@ -231,24 +281,41 @@ pub async fn create_event(
     crate::macos::applescript::run_applescript(&script)
 }
 
+/// Outcome of `request_full_access_to_events_blocking`. Distinguishing
+/// "completion handler fired" from "30s elapsed without it firing" lets
+/// the caller produce a useful error message — earlier code conflated
+/// these and surfaced the same generic timeout text either way.
+pub(crate) enum AccessRequestOutcome {
+    /// The completion block fired. Whether access was granted is
+    /// reflected in `EKEventStore::authorizationStatusForEntityType`
+    /// after this returns; we don't capture the bool here because
+    /// macOS 14+ makes that getter unreliable anyway.
+    Completed,
+    /// 30 seconds elapsed and the completion block never fired. The
+    /// user almost certainly has the permission dialog up and hasn't
+    /// answered.
+    TimedOut,
+}
+
 /// Synchronously request full Calendar access via the macOS 14+ API.
 ///
 /// The framework method is `requestFullAccessToEventsWithCompletion:`, which
-/// takes a block-based callback. We invoke it and block on a dispatch
-/// semaphore until the completion handler fires, so the caller can treat
-/// it as a normal synchronous call. This MUST be invoked from a thread
-/// that has a runloop OR be wrapped in spawn_blocking (which is already
-/// the case here) — completion blocks dispatch onto a private EventKit
-/// queue so they will fire regardless of caller runloop state.
+/// takes a block-based callback. We invoke it and block on an mpsc channel
+/// until the completion handler fires, so the caller can treat it as a
+/// normal synchronous call. This MUST be invoked from a thread that has a
+/// runloop OR be wrapped in spawn_blocking (which is already the case
+/// here) — completion blocks dispatch onto a private EventKit queue so
+/// they fire regardless of caller runloop state.
 ///
 /// If access is already granted, the completion fires immediately with
 /// `granted: true`. If denied, it fires immediately with `granted: false`.
 /// If undetermined, macOS shows the system permission dialog and the
 /// completion fires after the user clicks. We give it a 30 second cap to
-/// avoid hanging forever if the user ignores the dialog — that matches
-/// the existing AppleScript subprocess timeout philosophy and produces
-/// the same kind of recoverable error.
-pub(crate) fn request_full_access_to_events_blocking(store: &objc2_event_kit::EKEventStore) {
+/// avoid hanging forever if the user ignores the dialog — caller can
+/// produce a Calendar-specific error message off the `TimedOut` variant.
+pub(crate) fn request_full_access_to_events_blocking(
+    store: &objc2_event_kit::EKEventStore,
+) -> AccessRequestOutcome {
     use block2::RcBlock;
     use objc2::runtime::Bool;
     use objc2_foundation::NSError;
@@ -281,7 +348,10 @@ pub(crate) fn request_full_access_to_events_blocking(store: &objc2_event_kit::EK
 
     // Wait up to 30s for the callback. If access is already granted, this
     // returns essentially instantly. If a dialog is up, we wait for the user.
-    let _ = rx.recv_timeout(std::time::Duration::from_secs(30));
+    match rx.recv_timeout(std::time::Duration::from_secs(30)) {
+        Ok(()) => AccessRequestOutcome::Completed,
+        Err(_) => AccessRequestOutcome::TimedOut,
+    }
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
