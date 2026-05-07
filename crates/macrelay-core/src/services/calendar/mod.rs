@@ -865,40 +865,42 @@ mod tests {
             .await;
     }
 
+    /// Tier 3 (integration) — hits the real EventKit framework against
+    /// the user's Calendar database. Run locally with
+    /// `cargo test -p macrelay-core --lib -- --include-ignored
+    ///   test_search_events_eventkit_smoke`.
+    ///
+    /// This replaced the prior `test_mock_search_events`: that one used
+    /// the AppleScript MOCK_RUNNER to inject a synthetic event response,
+    /// which made sense when the search path went through osascript. The
+    /// new path goes through `EKEventStore::eventsMatchingPredicate`, so
+    /// there's no script to intercept. Faking EventKit at the objc2 layer
+    /// would require a trait abstraction over the framework — not worth
+    /// the indirection for what is effectively a thin wrapper around an
+    /// indexed Apple API. Verifying it against the real store is faster
+    /// and catches more (e.g. predicate construction errors that would
+    /// raise an Objective-C exception).
     #[tokio::test]
-    async fn test_mock_search_events() {
-        let mock = Arc::new(AssertingMock {
-            expected_fragments: vec![
-                "tell application \"Calendar\"",
-                "start date >= now and start date <= endDate",
-                "summary of e",
-            ],
-            response: "Meeting||Monday, January 1, 2024 at 10:00:00 AM||Monday, January 1, 2024 at 11:00:00 AM||Office||Work||false\n".to_string(),
-        });
+    #[ignore] // Requires Calendar permission + a real EKEventStore — local only
+    async fn test_search_events_eventkit_smoke() {
+        let handler = handler_search_events();
+        let mut args = HashMap::new();
+        args.insert("limit".to_string(), json!(50));
 
-        MOCK_RUNNER
-            .scope(mock, async {
-                let handler = handler_search_events();
-                let mut args = HashMap::new();
-                args.insert("limit".to_string(), json!(1));
+        let result = handler(args).await.expect("Handler should not fail");
 
-                let result = handler(args).await.expect("Handler should not fail");
-                assert_eq!(result.is_error, Some(false));
-
-                let content = result.content[0].as_text().unwrap().text.as_str();
-                assert!(content.contains("Found 1 event(s)"));
-
-                // Extract JSON block
-                let json_start = content.find('[').expect("Expected JSON array start");
-                let events: Vec<serde_json::Value> = serde_json::from_str(&content[json_start..])
-                    .expect("Expected valid JSON array");
-
-                assert_eq!(events.len(), 1);
-                assert_eq!(events[0]["title"], "Meeting");
-                assert_eq!(events[0]["location"], "Office");
-                assert_eq!(events[0]["calendar"], "Work");
-            })
-            .await;
+        // Either we have permission and got events (or zero), or we
+        // surfaced a permission error. Both are acceptable here — the
+        // important guarantee is "doesn't hang, doesn't panic, returns
+        // a structured response in well under a second on any library".
+        let content = result.content[0].as_text().unwrap().text.as_str();
+        assert!(
+            content.starts_with("Found ")
+                || content.contains("No events found")
+                || content.to_lowercase().contains("permission")
+                || content.to_lowercase().contains("not authorized"),
+            "unexpected content: {content}"
+        );
     }
 
     #[tokio::test]

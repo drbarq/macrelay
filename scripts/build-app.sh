@@ -72,6 +72,53 @@ cat > "${CONTENTS}/Info.plist" << 'PLIST'
 </plist>
 PLIST
 
+# ── Codesigning ────────────────────────────────────────────────────────────
+# Sign the bundle with a Developer ID cert if one is available in the
+# keychain. This is the same identity CI uses (release.yml). Critically:
+# without proper signing, replacing /Applications/MacRelay.app with a local
+# build BREAKS the user's TCC csreq for permissions like Calendar Full
+# Access — System Settings still shows the toggle on, but EventKit silently
+# degrades to write-only because the running binary's code identity
+# doesn't match the original grant. If you don't have the cert, set
+# MACRELAY_SKIP_CODESIGN=1 to accept the ad-hoc-signed build (read-only
+# Calendar/Reminders will be broken until you reinstall a signed copy).
+IDENTITY_NAME="Developer ID Application: Joseph Tustin (X98GWB4NWD)"
+ENTITLEMENTS="macrelay.entitlements"
+
+if [[ "${MACRELAY_SKIP_CODESIGN:-0}" == "1" ]]; then
+    echo "Skipping codesign (MACRELAY_SKIP_CODESIGN=1) — Calendar/Reminders read access will not work against existing TCC grants."
+elif security find-identity -v -p codesigning | grep -q "$IDENTITY_NAME"; then
+    echo "Codesigning with $IDENTITY_NAME..."
+    # Sign nested executables first (codesign is bottom-up).
+    #
+    # CRITICAL: identifier MUST be "com.macrelay.app" (not ".server"), even
+    # for the inner binaries. Reason: when Claude Desktop launches macrelay
+    # as a stdio child, it execs the binary directly — no bundle binding.
+    # EventKit's in-process TCC check then uses the binary's signed
+    # identifier as the lookup key. The user's Calendar grant has a csreq
+    # of `identifier "com.macrelay.app" ...`; if we sign the binary as
+    # `com.macrelay.server`, the csreq fails to match and the grant
+    # silently degrades to write-only (EKAuth=3) — which is invisible in
+    # System Settings (toggle still shows Full Access) and reports as
+    # "granted" in our own permissions_status. This wasted ~2 hours of
+    # debugging in the v1.2.4 session, hence the long comment.
+    codesign --sign "$IDENTITY_NAME" --options runtime --entitlements "$ENTITLEMENTS" \
+        --identifier "com.macrelay.app" --force \
+        "${CONTENTS}/MacOS/macrelay"
+    codesign --sign "$IDENTITY_NAME" --options runtime --entitlements "$ENTITLEMENTS" \
+        --identifier "com.macrelay.app" --force \
+        "${CONTENTS}/Resources/mcpb/server/macrelay"
+    # Then the outer bundle (signs the menubar binary with the bundle id).
+    codesign --sign "$IDENTITY_NAME" --options runtime --entitlements "$ENTITLEMENTS" \
+        --force "$APP_DIR"
+    codesign --verify --deep --strict "$APP_DIR"
+    echo "Signed and verified."
+else
+    echo "WARNING: Developer ID cert not in keychain; falling back to ad-hoc signing."
+    echo "         The resulting build will NOT satisfy TCC csreq for Calendar/Reminders."
+    echo "         Set MACRELAY_SKIP_CODESIGN=1 to suppress this message."
+fi
+
 echo ""
 echo "Built: ${APP_DIR}"
 echo ""

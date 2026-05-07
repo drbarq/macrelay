@@ -126,18 +126,29 @@ jobs:
           </plist>
           PLIST
 
-          # Sign every executable in the bundle individually
+          # Sign every executable in the bundle individually.
+          #
+          # Identifier MUST be "com.macrelay.app" (not ".server"). When
+          # Claude Desktop execs the macrelay binary directly as a stdio
+          # child, EventKit's TCC csreq check uses the binary's signed
+          # identifier — and the user's Calendar grant requires
+          # `identifier "com.macrelay.app"`. Signing as ".server" causes a
+          # silent degrade to write-only (EKAuth=3) that doesn't show up in
+          # System Settings or permissions_status. See scripts/build-app.sh
+          # for the longer note. Earlier releases used ".server" and
+          # accidentally worked for users whose TCC grant happened to be
+          # path-based or whose .app launched via the menubar process.
           codesign --sign "$IDENTITY" \
             --options runtime \
             --entitlements macrelay.entitlements \
-            --identifier "com.macrelay.server" \
+            --identifier "com.macrelay.app" \
             --force \
             "${CONTENTS}/MacOS/macrelay"
 
           codesign --sign "$IDENTITY" \
             --options runtime \
             --entitlements macrelay.entitlements \
-            --identifier "com.macrelay.server" \
+            --identifier "com.macrelay.app" \
             --force \
             "${CONTENTS}/Resources/mcpb/server/macrelay"
 

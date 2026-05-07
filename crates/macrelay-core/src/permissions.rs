@@ -15,10 +15,19 @@ pub enum PermissionType {
 }
 
 /// Current status of a permission.
+///
+/// `WriteOnly` is specific to Calendar/Reminders on macOS 14+: the user
+/// has granted access but only at the "Add Events" tier — read queries
+/// (`EKEventStore::eventsMatchingPredicate`) silently return empty. We
+/// surface this as its own status rather than collapsing into `Granted`,
+/// because the diagnostic experience matters: `permissions_status` saying
+/// `"calendar": "granted"` while EventKit returns no events is the kind
+/// of mismatch that wasted hours of debugging this session.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PermissionStatus {
     Granted,
+    GrantedWriteOnly,
     Denied,
     NotDetermined,
     Unknown,
@@ -115,6 +124,11 @@ impl PermissionManager {
     }
 
     /// Check Calendar permission status.
+    ///
+    /// macOS 14+ split the old "Authorized" tier into two: status=3 means
+    /// WriteOnly (can add events but cannot read), status=4 means
+    /// FullAccess. We surface both, because for read-heavy tools like
+    /// `pim_calendar_search_events` the difference is critical.
     pub fn check_calendar() -> PermissionStatus {
         use objc2_event_kit::{EKEntityType, EKEventStore};
         let status = unsafe { EKEventStore::authorizationStatusForEntityType(EKEntityType::Event) };
@@ -122,13 +136,14 @@ impl PermissionManager {
             0 => PermissionStatus::NotDetermined, // EKAuthorizationStatusNotDetermined
             1 => PermissionStatus::Denied,        // EKAuthorizationStatusRestricted
             2 => PermissionStatus::Denied,        // EKAuthorizationStatusDenied
-            3 => PermissionStatus::Granted,       // EKAuthorizationStatusAuthorized
+            3 => PermissionStatus::GrantedWriteOnly, // Authorized (legacy) / WriteOnly (macOS 14+)
             4 => PermissionStatus::Granted,       // EKAuthorizationStatusFullAccess (macOS 14+)
             _ => PermissionStatus::Unknown,
         }
     }
 
-    /// Check Reminders permission status.
+    /// Check Reminders permission status. See `check_calendar` for the
+    /// WriteOnly vs FullAccess split.
     pub fn check_reminders() -> PermissionStatus {
         use objc2_event_kit::{EKEntityType, EKEventStore};
         let status =
@@ -137,7 +152,7 @@ impl PermissionManager {
             0 => PermissionStatus::NotDetermined,
             1 => PermissionStatus::Denied,
             2 => PermissionStatus::Denied,
-            3 => PermissionStatus::Granted,
+            3 => PermissionStatus::GrantedWriteOnly,
             4 => PermissionStatus::Granted,
             _ => PermissionStatus::Unknown,
         }
@@ -212,6 +227,11 @@ impl PermissionManager {
         match status {
             // Granted — proceed
             PermissionStatus::Granted => Ok(()),
+            // WriteOnly — proceed; the call site decides whether the limited
+            // tier is enough (e.g. create_event works fine, search_events
+            // does not). EventKit calls return the appropriate framework
+            // error when read access is missing.
+            PermissionStatus::GrantedWriteOnly => Ok(()),
             // NotDetermined — let the operation run so macOS can prompt the user.
             // The subprocess timeout will catch it if the dialog goes unanswered.
             PermissionStatus::NotDetermined => Ok(()),
@@ -431,6 +451,7 @@ mod tests {
             // Just verify it returns a valid variant
             match status {
                 PermissionStatus::Granted
+                | PermissionStatus::GrantedWriteOnly
                 | PermissionStatus::Denied
                 | PermissionStatus::NotDetermined
                 | PermissionStatus::Unknown => {} // all valid

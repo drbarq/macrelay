@@ -16,8 +16,9 @@ thiserror = { workspace = true }
 
 # macOS framework bindings
 objc2 = "0.6"
-objc2-foundation = { version = "0.3", features = ["NSString", "NSArray", "NSDate", "NSDictionary", "NSError", "NSURL", "NSCalendar", "NSTimeZone"] }
-objc2-event-kit = { version = "0.3", features = ["EKEventStore", "EKEvent", "EKCalendar", "EKReminder", "EKCalendarItem", "EKObject", "EKSource", "EKAlarm", "EKRecurrenceRule", "EKStructuredLocation"] }
+objc2-foundation = { version = "0.3", features = ["NSString", "NSArray", "NSDate", "NSDictionary", "NSError", "NSURL", "NSCalendar", "NSTimeZone", "NSPredicate", "NSDateFormatter", "NSFormatter"] }
+objc2-event-kit = { version = "0.3", features = ["EKEventStore", "EKEvent", "EKCalendar", "EKReminder", "EKCalendarItem", "EKObject", "EKSource", "EKAlarm", "EKRecurrenceRule", "EKStructuredLocation", "block2"] }
+block2 = "0.6"
 objc2-contacts = { version = "0.3", features = ["CNContactStore", "CNContact", "CNContactFetchRequest", "CNMutableContact", "CNLabeledValue", "CNPhoneNumber", "CNPostalAddress"] }
 objc2-core-location = { version = "0.3", features = ["CLLocationManager", "CLLocation", "CLGeocoder", "CLPlacemark"] }
 objc2-app-kit = { version = "0.3", features = ["NSWorkspace", "NSRunningApplication"] }

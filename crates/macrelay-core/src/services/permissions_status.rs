@@ -147,7 +147,7 @@ mod tests {
                         .as_str()
                         .expect("target status should be string");
                     match s {
-                        "granted" | "denied" | "not_determined" | "unknown" => {}
+                        "granted" | "granted_write_only" | "denied" | "not_determined" | "unknown" => {}
                         _ => panic!(
                             "Unexpected automation status '{}' for target '{}'",
                             s, target
@@ -158,7 +158,7 @@ mod tests {
             }
             let status = val.as_str().expect("Status should be a string");
             match status {
-                "granted" | "denied" | "not_determined" | "unknown" => {}
+                "granted" | "granted_write_only" | "denied" | "not_determined" | "unknown" => {}
                 _ => panic!("Unexpected status '{}' for key '{}'", status, key),
             }
         }
