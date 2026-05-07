@@ -60,6 +60,14 @@ cat > "${CONTENTS}/Info.plist" << 'PLIST'
     <true/>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>MacRelay drives Notes, Calendar, Mail, Reminders, and other Apple apps via AppleScript so that AI assistants can read and write your data on your behalf.</string>
+    <key>NSCalendarsUsageDescription</key>
+    <string>MacRelay reads and creates calendar events on your behalf.</string>
+    <key>NSContactsUsageDescription</key>
+    <string>MacRelay reads your contacts so AI assistants can look up phone numbers, emails, and addresses.</string>
+    <key>NSRemindersUsageDescription</key>
+    <string>MacRelay reads and creates reminders on your behalf.</string>
 </dict>
 </plist>
 PLIST

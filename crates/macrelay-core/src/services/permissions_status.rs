@@ -28,7 +28,7 @@ fn handler() -> crate::registry::ToolHandler {
         Box::pin(async move {
             let statuses = PermissionManager::check_all();
 
-            // Build a sorted JSON object from the permission statuses.
+            // Build a sorted JSON object from the privacy-category statuses.
             let mut map = serde_json::Map::new();
             for (perm_type, status) in &statuses {
                 let key = serde_json::to_value(perm_type)
@@ -40,7 +40,26 @@ fn handler() -> crate::registry::ToolHandler {
                 map.insert(key, val);
             }
 
-            // Sort keys for deterministic output.
+            // Add Automation (Apple Events) grants under a separate key.
+            // These come from the user TCC database, not a public API, and
+            // are keyed by target-app bundle id (e.g. "com.apple.Notes").
+            // Empty map means we couldn't read TCC — present the field
+            // anyway so callers know the feature exists.
+            let auto_grants = PermissionManager::check_automation_grants();
+            let mut auto_entries: Vec<_> = auto_grants.into_iter().collect();
+            auto_entries.sort_by(|a, b| a.0.cmp(&b.0));
+            let auto_map: serde_json::Map<String, serde_json::Value> = auto_entries
+                .into_iter()
+                .map(|(k, v)| (k, serde_json::to_value(v).unwrap_or_default()))
+                .collect();
+            map.insert(
+                "automation".to_string(),
+                serde_json::Value::Object(auto_map),
+            );
+
+            // Sort keys for deterministic output (the `automation` key is
+            // included so it sorts naturally between `accessibility` and
+            // `calendar`).
             let mut entries: Vec<_> = map.into_iter().collect();
             entries.sort_by(|a, b| a.0.cmp(&b.0));
             let sorted_map: serde_json::Map<String, serde_json::Value> =
@@ -115,8 +134,28 @@ mod tests {
         sorted_keys.sort();
         assert_eq!(keys, sorted_keys, "Keys should be sorted alphabetically");
 
-        // Verify status values are valid
+        // Verify status values are valid for the privacy-category keys.
+        // The `automation` key is a nested object (target-app -> status),
+        // not a status string, so handle it separately.
         for (key, val) in map {
+            if key == "automation" {
+                let auto_obj = val
+                    .as_object()
+                    .expect("automation should be an object of target-app -> status");
+                for (target, target_status) in auto_obj {
+                    let s = target_status
+                        .as_str()
+                        .expect("target status should be string");
+                    match s {
+                        "granted" | "denied" | "not_determined" | "unknown" => {}
+                        _ => panic!(
+                            "Unexpected automation status '{}' for target '{}'",
+                            s, target
+                        ),
+                    }
+                }
+                continue;
+            }
             let status = val.as_str().expect("Status should be a string");
             match status {
                 "granted" | "denied" | "not_determined" | "unknown" => {}

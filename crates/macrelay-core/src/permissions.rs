@@ -240,6 +240,101 @@ impl PermissionManager {
             perm.grant_instructions()
         )
     }
+
+    /// Read Automation (Apple Events) grants from the user's TCC database.
+    ///
+    /// macOS does not expose Automation permission status via any public API,
+    /// but the grants are recorded in a SQLite database the user has read
+    /// access to. We query for `kTCCServiceAppleEvents` rows that match either
+    /// MacRelay's bundle identifier or its current binary path; both forms
+    /// can appear in TCC depending on how the app was launched and codesigned.
+    ///
+    /// Returns a map keyed by target-app bundle id (e.g. `com.apple.Notes`)
+    /// to `PermissionStatus`. Returns an empty map (not an error) if the
+    /// database can't be read — this should be informational, not blocking.
+    ///
+    /// This matters because `check_all()` reports the seven privacy categories
+    /// with public APIs (Calendar, Reminders, Contacts, etc.) — it does NOT
+    /// report Automation, which is the permission AppleScript-driven services
+    /// (Notes, Mail, Calendar via osascript) actually need at runtime. A
+    /// previous debugging session was misled into thinking permissions were
+    /// fine because `check_all()` showed all-green, while the real bottleneck
+    /// was a slow Notes script timing out — but the same blind spot would
+    /// hide a real Automation denial.
+    pub fn check_automation_grants() -> HashMap<String, PermissionStatus> {
+        let mut grants = HashMap::new();
+
+        // Locate the user TCC database.
+        let home = match std::env::var("HOME") {
+            Ok(h) => h,
+            Err(_) => return grants,
+        };
+        let db_path = format!("{home}/Library/Application Support/com.apple.TCC/TCC.db");
+        if !std::path::Path::new(&db_path).exists() {
+            return grants;
+        }
+
+        // Identify the calling process for matching against TCC client column.
+        // TCC may have grants under bundle id, full binary path, or both.
+        let bundle_id = "com.macrelay.app"; // matches CFBundleIdentifier in scripts/build-app.sh
+        let exe_path = std::env::current_exe()
+            .ok()
+            .and_then(|p| p.to_str().map(|s| s.to_string()))
+            .unwrap_or_default();
+
+        let conn = match rusqlite::Connection::open_with_flags(
+            &db_path,
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+        ) {
+            Ok(c) => c,
+            Err(_) => return grants, // FDA may not be granted; return empty
+        };
+
+        let mut stmt = match conn.prepare(
+            "SELECT indirect_object_identifier, auth_value
+             FROM access
+             WHERE service = 'kTCCServiceAppleEvents'
+               AND (client = ?1 OR client = ?2)",
+        ) {
+            Ok(s) => s,
+            Err(_) => return grants,
+        };
+
+        let rows = stmt.query_map(rusqlite::params![bundle_id, exe_path], |row| {
+            let target: String = row.get(0)?;
+            let auth: i64 = row.get(1)?;
+            Ok((target, auth))
+        });
+
+        if let Ok(rows) = rows {
+            for row in rows.flatten() {
+                let (target, auth) = row;
+                // TCC auth_value codes:
+                //   0 = denied, 1 = unknown/unset, 2 = allowed,
+                //   3 = limited, 4 = add-modify allowed
+                let status = match auth {
+                    2..=4 => PermissionStatus::Granted,
+                    0 => PermissionStatus::Denied,
+                    1 => PermissionStatus::NotDetermined,
+                    _ => PermissionStatus::Unknown,
+                };
+                // If we have multiple rows for the same target (e.g. one by
+                // bundle id, one by path), prefer the most permissive.
+                grants
+                    .entry(target)
+                    .and_modify(|s| {
+                        if matches!(*s, PermissionStatus::Denied | PermissionStatus::Unknown)
+                            && matches!(status, PermissionStatus::Granted)
+                        {
+                            *s = status;
+                        }
+                    })
+                    .or_insert(status);
+            }
+        }
+
+        grants
+    }
 }
 
 #[cfg(test)]

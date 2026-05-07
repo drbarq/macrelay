@@ -307,6 +307,12 @@ fn handler_search_notes() -> ToolHandler {
                 format!(r#"repeat with f in {{folder "{escaped_folder}" of a}}"#)
             };
 
+            // Use Notes' built-in `whose name contains` filter rather than
+            // iterating every note manually. On a 1500-note library, the
+            // manual scan takes ~55s (over the default 30s timeout); the
+            // `whose` form returns the same results in ~8s. We still iterate
+            // accounts/folders so we can attach folder + account names to
+            // each result, but the per-note property loop is gone.
             let script = format!(
                 r#"
                 set searchQuery to "{escaped_query}"
@@ -321,16 +327,14 @@ fn handler_search_notes() -> ToolHandler {
                         set acctName to name of a
                         {folder_clause}
                             set folderName to name of f
-                            repeat with n in notes of f
-                                set noteName to name of n
-                                if noteName contains searchQuery then
-                                    if skipped < skipCount then
-                                        set skipped to skipped + 1
-                                    else if matchCount < maxResults then
-                                        set modDate to modification date of n
-                                        set output to output & noteName & "||" & folderName & "||" & acctName & "||" & (modDate as text) & linefeed
-                                        set matchCount to matchCount + 1
-                                    end if
+                            set hits to (notes of f whose name contains searchQuery)
+                            repeat with n in hits
+                                if skipped < skipCount then
+                                    set skipped to skipped + 1
+                                else if matchCount < maxResults then
+                                    set modDate to modification date of n
+                                    set output to output & (name of n) & "||" & folderName & "||" & acctName & "||" & (modDate as text) & linefeed
+                                    set matchCount to matchCount + 1
                                 end if
                                 if matchCount >= maxResults then exit repeat
                             end repeat
@@ -343,7 +347,13 @@ fn handler_search_notes() -> ToolHandler {
                 "#
             );
 
-            match crate::macos::applescript::run_applescript(&script) {
+            // Use EXTENDED_TIMEOUT (60s) as a safety margin: the `whose`
+            // filter is fast, but very large libraries (10k+ notes) may
+            // still need more than 30s on a cold Notes process.
+            match crate::macos::applescript::run_applescript_with_timeout(
+                &script,
+                crate::macos::applescript::EXTENDED_TIMEOUT,
+            ) {
                 Ok(output) => {
                     let mut results: Vec<serde_json::Value> = Vec::new();
                     for line in output.lines() {
@@ -592,8 +602,14 @@ fn handler_update_note() -> ToolHandler {
 
             let updated_desc = updated_parts.join(" and ");
 
-            // Iterate accounts > folders > notes (avoids the container bug
-            // that affects flat `every note whose name is` lookups).
+            // Iterate accounts > folders, then use `whose name is` *scoped to
+            // each folder* to find the target note. This keeps `folderName`
+            // and `acctName` available for the result message (the flat
+            // `every note whose name is` form loses parent context — see
+            // `delete_note` which doesn't need that context, vs. this one
+            // which does). Folder-scoped `whose` is O(1) lookup per folder
+            // instead of O(N) manual property reads, so update_note stops
+            // scaling with library size.
             let script = format!(
                 r#"
                 tell application "Notes"
@@ -603,15 +619,14 @@ fn handler_update_note() -> ToolHandler {
                         set acctName to name of a
                         repeat with f in folders of a
                             set folderName to name of f
-                            repeat with n in notes of f
-                                if name of n is "{escaped_name}" then
-                                    {update_commands}
-                                    set noteFound to true
-                                    set resultMsg to "Updated {updated_desc} of note: {escaped_name} (folder: " & folderName & ", account: " & acctName & ")"
-                                    exit repeat
-                                end if
-                            end repeat
-                            if noteFound then exit repeat
+                            set matches to (every note of f whose name is "{escaped_name}")
+                            if (count of matches) > 0 then
+                                set n to item 1 of matches
+                                {update_commands}
+                                set noteFound to true
+                                set resultMsg to "Updated {updated_desc} of note: {escaped_name} (folder: " & folderName & ", account: " & acctName & ")"
+                                exit repeat
+                            end if
                         end repeat
                         if noteFound then exit repeat
                     end repeat
@@ -893,10 +908,12 @@ mod tests {
         }
         fn run_applescript_with_timeout(
             &self,
-            _script: &str,
+            script: &str,
             _timeout: Duration,
         ) -> anyhow::Result<String> {
-            unimplemented!()
+            // search_notes calls the timeout variant directly so it can opt
+            // into EXTENDED_TIMEOUT; route it through the same assert path.
+            self.run_applescript(script)
         }
         fn run_jxa(&self, _script: &str) -> anyhow::Result<String> {
             unimplemented!()
@@ -991,8 +1008,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_mock_search_notes() {
+        // Regression guard: the search MUST use the `whose name contains`
+        // server-side filter, not a manual `repeat ... if name of n contains`
+        // scan. The latter takes ~55s on a 1500-note library and trips the
+        // 30s default timeout.
         let mock = Arc::new(AssertingMock {
-            expected_fragment: "set searchQuery to \"My\"".to_string(),
+            expected_fragment: "whose name contains searchQuery".to_string(),
             response: "My Note||Notes||iCloud||Monday, January 1, 2024 at 12:00:00 PM\n"
                 .to_string(),
         });
@@ -1228,8 +1249,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_mock_update_note() {
+        // Regression guard: like search_notes, update_note must use
+        // folder-scoped `whose name is` rather than a manual property loop.
+        // We assert on the lookup form, not just the body assignment.
         let mock = Arc::new(AssertingMock {
-            expected_fragment: "set body of n to".to_string(),
+            expected_fragment: "every note of f whose name is \"My Note\"".to_string(),
             response: "Updated body of note: My Note (folder: Notes, account: iCloud)".to_string(),
         });
 

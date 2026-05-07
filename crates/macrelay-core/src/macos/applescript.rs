@@ -97,10 +97,24 @@ fn run_applescript_impl(script: &str, timeout: Duration) -> Result<String> {
                     let _ = child.kill();
                     let _ = child.wait(); // Reap the zombie
                     return Err(anyhow::anyhow!(
-                        "AppleScript timed out after {}s. \
-                        This usually means macOS is showing a permission dialog \
-                        that hasn't been answered. Check for a system dialog asking \
-                        to grant access, then try again.",
+                        "AppleScript exceeded {}s timeout. Two common causes:\n\
+                        \n\
+                        1. Slow query against a large data set (e.g. searching \
+                        thousands of notes/messages). Try a narrower query, or \
+                        — if you wrote this script — use `whose` filters \
+                        instead of manual `repeat with ... if ... contains` \
+                        loops; the latter pay an AppleScript IPC cost per item.\n\
+                        \n\
+                        2. macOS is waiting on a permission dialog you haven't \
+                        answered. Check Privacy & Security > Automation in \
+                        System Settings; on first use of a target app (Notes, \
+                        Calendar, Mail, etc.) macOS may have shown a dialog \
+                        that's now hidden behind another window.\n\
+                        \n\
+                        Note that `system_permissions_status` does NOT cover \
+                        Automation/Apple Events permissions — only the seven \
+                        privacy categories with public APIs. An \"all granted\" \
+                        report there does not rule out (2).",
                         timeout.as_secs()
                     ));
                 }
